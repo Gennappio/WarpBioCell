@@ -69,8 +69,9 @@ Replace this file's content when the task is done.
   curve, viable-rim thickness, necrosis onset diameter).
 * The `MicroC_warp` adapter is created but **not committed** in the OpenCellComms repository
   (that repository has unrelated uncommitted changes of yours); commit it there when ready.
-  It predates Milestone 11: a `define_warp_network` node (network file + inputs) would let
-  workflows drive the gene network.
+  Rebuilt on 2026-09-22 as atomic nodes in the MicroC adapter's ABM structure (the engine's
+  scheduler owns the loop, one iteration = one cell step, full per-node observability);
+  `docs/integrations/opencellcomms.md` lists the library calls it depends on.
 * In network mode the division rate is the rate *while Proliferation is ON* (~20 % of the
   cells at stationarity with the MicroC network); `configs/tumor_spheroid_network.yaml` uses
   0.1/h for an effective ~0.02/h — an illustrative choice to confirm or replace.
@@ -82,6 +83,5 @@ Replace this file's content when the task is done.
   then profile the contact kernel and the SOR sweeps and decide whether anything merits an
   upstream Warp issue (docs/upstream.md).
 * Network follow-ups: MCT1 lactate uptake and pH as species the network can read
-  (`MCT1_stimulus` already reads lactate); `define_warp_network` in the OpenCellComms
-  adapter; a comparison of the `maboss` mode against the MaBoSS binary on the MicroC
-  network (the closed-form checks stand in for now).
+  (`MCT1_stimulus` already reads lactate); a comparison of the `maboss` mode against the
+  MaBoSS binary on the MicroC network (the closed-form checks stand in for now).

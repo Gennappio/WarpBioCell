@@ -152,22 +152,29 @@ class NetworkRuntime:
             device=self.device,
         )
 
-    def update(self, population: CellPopulation, dt_h: float) -> None:
+    def update(self, population: CellPopulation, dt_h: float, updates_per_step: int | None = None, time_units_per_h: float | None = None) -> None:
+        """Advance every cell's network by one cell step of ``dt_h``. The amount of network
+        time per step comes from ``params`` unless overridden here (a driver that owns that
+        value elsewhere, e.g. a workflow node); the update mode is fixed at construction."""
         n = population.count
         if n == 0:
             return
+        picks = self.params.updates_per_step if updates_per_step is None else int(updates_per_step)
+        units = self.params.time_units_per_h if time_units_per_h is None else float(time_units_per_h)
+        if picks < 1 or units <= 0.0:
+            raise NetworkError("updates_per_step must be >= 1 and time_units_per_h > 0")
         a = self._arrays
         common = [a["ops"], a["args"], a["start"], a["length"], a["updatable"]]
         if self.params.update == "asynchronous":
-            wp.launch(network_update_async, dim=n, inputs=[self.params.updates_per_step, *common, population.rng_state, self.states], device=self.device)
+            wp.launch(network_update_async, dim=n, inputs=[picks, *common, population.rng_state, self.states], device=self.device)
         elif self.params.update == "synchronous":
-            for _ in range(self.params.updates_per_step):
+            for _ in range(picks):
                 wp.launch(network_update_sync, dim=n, inputs=[*common, self.states, self._scratch], device=self.device)
         else:
             wp.launch(
                 network_update_maboss,
                 dim=n,
-                inputs=[float(dt_h * self.params.time_units_per_h), self.params.max_events_per_step, *common, a["rate_up_true"], a["rate_up_false"], a["rate_down_true"], a["rate_down_false"], population.rng_state, self.states],
+                inputs=[float(dt_h * units), self.params.max_events_per_step, *common, a["rate_up_true"], a["rate_up_false"], a["rate_down_true"], a["rate_down_false"], population.rng_state, self.states],
                 device=self.device,
             )
 

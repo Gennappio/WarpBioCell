@@ -93,21 +93,15 @@ class LifecycleParams:
         return cls(**values)
 
 
-def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: float) -> int:
-    """Advance death/state/division decisions by ``dt`` [h] and append daughters.
-
-    Returns the number of daughters created. Contains exactly one host-device synchronization
-    (reading that number). Raises :class:`CapacityError`, leaving no daughter placed, if the
-    population would exceed its capacity; decisions taken in this step (deaths, state changes,
-    consumed random draws) are kept, so the caller should stop the run rather than retry.
-    """
+def decide_lifecycle(population: CellPopulation, params: LifecycleParams, dt: float) -> None:
+    """Every living cell's decisions for one step of ``dt`` [h]: death, state, and whether it
+    divides (``divide_flag``, the division intent). No host synchronization; nothing is created
+    until :func:`commit_divisions` runs. ``lifecycle_step`` = decide + commit."""
     if dt <= 0.0:
         raise ValueError("dt must be positive")
     n = population.count
     if n == 0:
-        return 0
-    device = population.device
-
+        return
     wp.launch(
         lifecycle_decide,
         dim=n,
@@ -134,9 +128,21 @@ def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: floa
             population.rng_state,
         ],
         outputs=[population.divide_flag],
-        device=device,
+        device=population.device,
     )
 
+
+def commit_divisions(population: CellPopulation, params: LifecycleParams) -> int:
+    """Append the daughters of the cells whose ``divide_flag`` :func:`decide_lifecycle` set.
+
+    Returns the number of daughters created. Contains exactly one host-device synchronization
+    (reading that number). Raises :class:`CapacityError`, leaving no daughter placed, if the
+    population would exceed its capacity; the decisions already taken (deaths, state changes,
+    consumed random draws) are kept, so the caller should stop the run rather than retry.
+    """
+    n = population.count
+    if n == 0:
+        return 0
     warp.utils.array_scan(population.divide_flag[:n], population.division_offset[:n], inclusive=True)
     n_daughters = int(population.division_offset[n - 1 : n].numpy()[0])  # the single sync
     if n_daughters == 0:
@@ -167,7 +173,15 @@ def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: floa
             population.neighbor_count,
             population.fate_flags,
         ],
-        device=device,
+        device=population.device,
     )
     population.count = n + n_daughters
     return n_daughters
+
+
+def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: float) -> int:
+    """Advance death/state/division decisions by ``dt`` [h] and append daughters: the two halves
+    :func:`decide_lifecycle` and :func:`commit_divisions` in sequence. Returns the number of
+    daughters created (one host sync); see :func:`commit_divisions` for :class:`CapacityError`."""
+    decide_lifecycle(population, params, dt)
+    return commit_divisions(population, params)

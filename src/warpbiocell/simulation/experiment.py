@@ -46,6 +46,56 @@ class RunResult:
         return np.array([row[name] for row in self.metrics], dtype=float)
 
 
+def observe(population, oxygen, time_h: float, shell_width: float = 20.0, region=None, network=None, wall_s: float = 0.0, field_sweeps: int = 0) -> tuple[dict, dict]:
+    """The metrics row of a population (columns of io/run_output.py METRIC_COLUMNS) and the radial
+    profile it was derived from. ``oxygen`` is an OxygenField or MetabolicFields (or None),
+    ``region`` a TissueRegion, ``network`` a NetworkRuntime. Used by Experiment and by external
+    drivers (the OpenCellComms adapter) so every runner reports the same quantities."""
+    summary = population_summary(population, oxygen)
+    profile = radial_profile(population, shell_width=shell_width)
+    radii = shell_radii(profile)
+    outside = 0
+    outside_tissue = 0
+    if oxygen is not None or region is not None:
+        positions = population.positions_numpy()
+        if oxygen is not None:
+            outside = int((~oxygen.geometry.contains(positions)).sum())
+        if region is not None:
+            outside_tissue = int((~region.contains(positions)).sum())
+    row = {
+        "time_h": time_h,
+        "cells": summary["cells"],
+        "living_cells": summary["living_cells"],
+        "dead_cells": summary["dead_cells"],
+        "proliferative_cells": summary["proliferative_cells"],
+        "quiescent_cells": summary["quiescent_cells"],
+        "hypoxic_cells": summary["hypoxic_cells"],
+        "mean_radius_um": summary["mean_radius"],
+        "spheroid_radius_um": summary["spheroid_radius"],
+        "necrotic_radius_um": radii["necrotic_radius"],
+        "hypoxic_radius_um": radii["hypoxic_radius"],
+        "non_proliferative_radius_um": radii["non_proliferative_radius"],
+        "viable_rim_um": max(0.0, summary["spheroid_radius"] - radii["necrotic_radius"]),
+        "proliferating_rim_um": max(0.0, summary["spheroid_radius"] - radii["non_proliferative_radius"]),
+        "oxygen_cells_mean_mmHg": summary.get("oxygen_cells_mean", float("nan")),
+        "oxygen_cells_min_mmHg": summary.get("oxygen_cells_min", float("nan")),
+        "oxygen_grid_mean_mmHg": summary.get("oxygen_grid_mean", float("nan")),
+        "oxygen_grid_min_mmHg": summary.get("oxygen_grid_min", float("nan")),
+        "glucose_cells_mean_mM": summary.get("glucose_cells_mean", float("nan")),
+        "glucose_cells_min_mM": summary.get("glucose_cells_min", float("nan")),
+        "lactate_cells_mean_mM": summary.get("lactate_cells_mean", float("nan")),
+        "lactate_cells_max_mM": summary.get("lactate_cells_max", float("nan")),
+        "field_sweeps": field_sweeps,
+        "cells_outside_grid": outside,
+        "cells_outside_tissue": outside_tissue,
+        "wall_s": wall_s,
+    }
+    fates = network.fate_counts(population) if network is not None else {}
+    for role in ("proliferation", "apoptosis", "growth_arrest", "necrosis"):
+        row[f"network_{role}_cells"] = fates.get(role, "")
+    return row, profile
+
+
 class Experiment:
     def __init__(self, config: ExperimentConfig, device: str | None = None, config_path: str | Path | None = None):
         self.config = config
@@ -116,49 +166,7 @@ class Experiment:
 
     def observe(self, wall_s: float = 0.0, field_sweeps: int = 0) -> tuple[dict, dict]:
         """Metrics row (AGENTS.md "Outputs") and the radial profile it was derived from."""
-        summary = population_summary(self.population, self.oxygen)
-        profile = radial_profile(self.population, shell_width=self.config.output.shell_width_um)
-        radii = shell_radii(profile)
-        outside = 0
-        outside_tissue = 0
-        if self.oxygen is not None or self.region is not None:
-            positions = self.population.positions_numpy()
-            if self.oxygen is not None:
-                outside = int((~self.oxygen.geometry.contains(positions)).sum())
-            if self.region is not None:
-                outside_tissue = int((~self.region.contains(positions)).sum())
-        row = {
-            "time_h": self.time_h,
-            "cells": summary["cells"],
-            "living_cells": summary["living_cells"],
-            "dead_cells": summary["dead_cells"],
-            "proliferative_cells": summary["proliferative_cells"],
-            "quiescent_cells": summary["quiescent_cells"],
-            "hypoxic_cells": summary["hypoxic_cells"],
-            "mean_radius_um": summary["mean_radius"],
-            "spheroid_radius_um": summary["spheroid_radius"],
-            "necrotic_radius_um": radii["necrotic_radius"],
-            "hypoxic_radius_um": radii["hypoxic_radius"],
-            "non_proliferative_radius_um": radii["non_proliferative_radius"],
-            "viable_rim_um": max(0.0, summary["spheroid_radius"] - radii["necrotic_radius"]),
-            "proliferating_rim_um": max(0.0, summary["spheroid_radius"] - radii["non_proliferative_radius"]),
-            "oxygen_cells_mean_mmHg": summary.get("oxygen_cells_mean", float("nan")),
-            "oxygen_cells_min_mmHg": summary.get("oxygen_cells_min", float("nan")),
-            "oxygen_grid_mean_mmHg": summary.get("oxygen_grid_mean", float("nan")),
-            "oxygen_grid_min_mmHg": summary.get("oxygen_grid_min", float("nan")),
-            "glucose_cells_mean_mM": summary.get("glucose_cells_mean", float("nan")),
-            "glucose_cells_min_mM": summary.get("glucose_cells_min", float("nan")),
-            "lactate_cells_mean_mM": summary.get("lactate_cells_mean", float("nan")),
-            "lactate_cells_max_mM": summary.get("lactate_cells_max", float("nan")),
-            "field_sweeps": field_sweeps,
-            "cells_outside_grid": outside,
-            "cells_outside_tissue": outside_tissue,
-            "wall_s": wall_s,
-        }
-        fates = self.network.fate_counts(self.population) if self.network is not None else {}
-        for role in ("proliferation", "apoptosis", "growth_arrest", "necrosis"):
-            row[f"network_{role}_cells"] = fates.get(role, "")
-        return row, profile
+        return observe(self.population, self.oxygen, self.time_h, shell_width=self.config.output.shell_width_um, region=self.region, network=self.network, wall_s=wall_s, field_sweeps=field_sweeps)
 
     # ---- run ----------------------------------------------------------------------------------
 

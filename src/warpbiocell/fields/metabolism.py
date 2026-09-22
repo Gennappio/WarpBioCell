@@ -60,15 +60,23 @@ class MetabolicFields:
             densities=self.densities, uptake_state_factors=oxygen_state_factors,
         )
         self.species_fields: dict[str, SpeciesField] = {"oxygen": self.oxygen}
+        self._settings, self._boundary, self._fixed_outside = settings, boundary, fixed_outside
         for params in species:
-            if params.name in self.species_fields:
-                raise ValueError(f"duplicate species {params.name!r}")
-            if params.production_source is not None and params.production_source not in self.species_fields:
-                raise ValueError(f"species {params.name!r}: production source {params.production_source!r} must be an earlier species")
-            self.species_fields[params.name] = SpeciesField(
-                geometry, params, settings, boundary=boundary, device=self.device, fixed_outside=fixed_outside, densities=self.densities
-            )
+            self.add_species(params)
         self.last_report: MetabolicReport | None = None
+
+    def add_species(self, params: SpeciesParams) -> SpeciesField:
+        """Append a species after oxygen (and after any species it takes its production from);
+        the order of addition is the solve order."""
+        if params.name in self.species_fields:
+            raise ValueError(f"duplicate species {params.name!r}")
+        if params.production_source is not None and params.production_source not in self.species_fields:
+            raise ValueError(f"species {params.name!r}: production source {params.production_source!r} must be an earlier species")
+        field = SpeciesField(
+            self.geometry, params, self._settings, boundary=self._boundary, device=self.device, fixed_outside=self._fixed_outside, densities=self.densities
+        )
+        self.species_fields[params.name] = field
+        return field
 
     @property
     def geometry(self) -> GridGeometry:

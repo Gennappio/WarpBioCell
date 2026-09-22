@@ -157,6 +157,14 @@ class RunOutput:
     def write_metadata(self) -> None:
         (self.directory / "metadata.json").write_text(json.dumps(self.metadata, indent=2, default=str))
 
+    def write_config(self, config_dict: dict) -> None:
+        """Replace the recorded configuration (a driver that assembles it node by node, such as
+        the OpenCellComms adapter, records the complete set once it is known)."""
+        self.metadata["config"] = config_dict
+        self.metadata["name"] = config_dict.get("name", self.metadata.get("name"))
+        (self.directory / "config.yaml").write_text(yaml.safe_dump(config_dict, sort_keys=False))
+        self.write_metadata()
+
     def finish(self, status: str, wall_s: float, summary: dict | None) -> None:
         self.metadata.update(
             {"status": status, "finished": dt.datetime.now(dt.timezone.utc).isoformat(), "wall_s": wall_s, "summary": summary}
