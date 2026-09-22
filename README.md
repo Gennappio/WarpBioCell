@@ -26,6 +26,7 @@ python -m warpbiocell.run --config configs/tumor_spheroid.yaml \
 python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml \
     --sweep configs/sweeps/oxygen_boundary.yaml                        # 5 boundary values x 3 seeds -> summary.csv
 python examples/analyze_sweep.py runs/<timestamp>_oxygen_boundary --zero-order-oxygen --figure sweep.png
+python -m warpbiocell.run --config configs/tumor_in_ellipsoid.yaml        # tumour filling an ellipsoidal tissue region
 pytest                                         # CPU-safe suite
 pytest -m gpu                                  # CUDA-only tests (skipped without CUDA)
 python examples/spike_repulsion.py             # 10k cells + HashGrid + overlap repulsion
@@ -38,7 +39,8 @@ python benchmarks/bench_field.py               # oxygen deposit / SOR sweep / sa
 
 A run directory holds `config.yaml` (verbatim), `metadata.json` (resolved config, seed,
 versions, git commit, device, status), `metrics.csv`, `profiles.csv`, `checkpoint/*.npz` and
-`figures/*.png` (matplotlib, optional: `pip install -e ".[plots]"`).
+`figures/*.png` (matplotlib, optional: `pip install -e ".[plots]"`). Segmentation masks
+(NIfTI) need `pip install -e ".[masks]"` (scipy, nibabel).
 
 ## On a CUDA machine
 
@@ -61,11 +63,13 @@ allocation, integer deposit); CPU and CUDA agree to float round-off in the physi
 
 ## Status
 
-Milestones 0–5 done and validated on CPU: cell arrays with preallocated capacity, HashGrid
+Milestones 0–7 done and validated on CPU: cell arrays with preallocated capacity, HashGrid
 neighbour search, overdamped overlap repulsion, stochastic division/death with deterministic
 daughter allocation, contact inhibition, a quasi-steady oxygen field (red-black SOR with
 Michaelis–Menten uptake) coupled to hypoxia, reduced division and anoxic death, and a
-reproducible experiment runner. The baseline spheroid produces growth → oxygen gradient →
-hypoxia → necrotic core with a stable viable rim, all emergent from the rules; numbers in
-[docs/results/spheroid_baseline.md](docs/results/spheroid_baseline.md). Next: see
-[TODO.md](TODO.md). Design notes: [docs/architecture_spike.md](docs/architecture_spike.md).
+reproducible experiment runner and sweeps, and tissue regions (synthetic shapes or
+segmentation masks) with seeding, confinement and a tissue-surface oxygen source. The
+baseline spheroid produces growth → oxygen gradient → hypoxia → necrotic core with a stable
+viable rim, all emergent from the rules; numbers in
+[docs/results/](docs/results/). Next: see [TODO.md](TODO.md). Design notes:
+[docs/architecture_spike.md](docs/architecture_spike.md), model in [docs/model.md](docs/model.md).

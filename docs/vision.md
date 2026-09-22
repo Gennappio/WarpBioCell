@@ -187,15 +187,24 @@ These are unresolved and should be answered before the corresponding milestone b
 
 ### The scale gap between spheroid and patient
 
-With an 8 µm cell radius and random close packing (~0.64), tissue holds roughly 3×10^5 cells per mm³.
+Measured, not estimated (Milestone 7, 2026-09-22): the mechanics settles the packing at
+0.94 cells per (16 µm)³, i.e. 2.3×10⁵ cells per mm³ for 8 µm cells.
 
 ```text
-500 µm spheroid        ≈ 2×10^4 cells     → MVP target range, one agent per cell is fine
-10^6 cells             ≈ 3 mm³
-1 cm³ imaged tumor     ≈ 3×10^8 cells     → beyond one-agent-per-cell on a single GPU
+500 µm spheroid        ≈ 1.5×10^4 cells     one agent per cell; runs on the CPU in minutes
+10^5 cells             ≈ 0.44 mm³            a lesion of ~0.9 mm diameter
+10^6 cells             ≈ 4.4 mm³             a lesion of ~2 mm diameter (the CUDA target)
+1 cm³ imaged tumour    ≈ 2.3×10^8 cells      beyond one agent per cell on a single GPU
 ```
 
-An MRI-visible tumor cannot be simulated cell by cell with the MVP architecture. Milestone 7 needs an explicit strategy: coarse-grained agents (one agent per cell cluster), a hybrid continuum/ABM model with agents only in regions of interest, a representative sub-volume, or multi-GPU. The choice changes what "patient-specific cellular twin" means scientifically.
+`geometry/seeding.py` makes this explicit: filling a region above `cells.max_cells` raises
+`CellBudgetError` with the count, and `geometry.seed_within_radius_um` seeds a sub-volume.
+So today a segmented lesion up to ~2 mm can be simulated cell by cell (once the GPU numbers
+confirm the 10⁶ budget), and anything larger needs a strategy that is still open:
+coarse-grained agents (one agent per cell cluster), a hybrid continuum/ABM model with agents
+only in a region of interest, a representative sub-volume with periodic or mirror faces
+(Neumann faces exist), or multi-GPU. The choice changes what "patient-specific cellular
+twin" means scientifically and should be made with data, not before.
 
 ### Positioning against existing simulators
 

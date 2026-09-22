@@ -62,7 +62,7 @@ Warp has no CUDA backend on macOS. The development machine is a Mac, so local ru
 
 * All code must run with `device="cpu"`. Never hard-code `"cuda"`; take the device from configuration.
 * All tests must pass on CPU. Tests that need CUDA are marked `gpu` and skipped when no CUDA device exists.
-* GPU-vs-reference tests and all performance numbers come from a CUDA machine (TODO: specify which one).
+* GPU-vs-reference tests and all performance numbers come from the user's CUDA machine, where the repository is uploaded at the end (README, "On a CUDA machine"); nothing has run on CUDA yet.
 * Never report a CPU timing as GPU performance. Every benchmark records the device.
 
 ### Commands
@@ -76,6 +76,7 @@ uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[d
     --set oxygen.boundary_mmHg=150 --set simulation.duration_h=48 --device cpu     # overrides
 .venv/bin/python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml \
     --sweep configs/sweeps/oxygen_boundary.yaml [--dry-run]                        # grid x seeds -> summary.csv
+.venv/bin/python -m warpbiocell.run --config configs/tumor_in_ellipsoid.yaml       # tumour filling a tissue region
 .venv/bin/python examples/analyze_sweep.py runs/<sweep dir> --zero-order-oxygen --figure out.png
 .venv/bin/python examples/spike_repulsion.py           # 10k cells + HashGrid + repulsion
 .venv/bin/python examples/growth_contact_inhibition.py # growth by division under contact inhibition
@@ -115,14 +116,13 @@ src/warpbiocell/
     run.py          python -m warpbiocell.run
     cells/          state.py  model.py  initialization.py  lifecycle.py  mechanics.py
     spatial/        neighbors.py
-    fields/         scalar_field.py (grid, boundaries)  diffusion.py (SOR, FTCS)  oxygen.py (params, coupling)
-    kernels/        cell_kernels.py  field_kernels.py  mechanics_kernels.py
+    fields/         scalar_field.py (grid, boundaries, pinned nodes)  diffusion.py (SOR, FTCS)  oxygen.py (params, coupling)
+    geometry/       shapes.py (sphere, ellipsoid, union SDFs)  region.py (TissueRegion)  seeding.py  masks.py (scipy/nibabel, optional)
+    kernels/        cell_kernels.py  field_kernels.py  mechanics_kernels.py  geometry_kernels.py
     reference/      slow numpy versions of kernels, used only by tests
-    metrics/        population.py (state counts, summary, oxygen summary, radial profile)
-    io/             checkpoints.py  export.py
-    visualization/  simple_3d.py
-examples/tumor_spheroid/
-tests/  benchmarks/  docs/  configs/
+    metrics/        population.py (state counts, summary, oxygen summary, radial profile)  timeseries.py (onsets)
+    sweep.py        python -m warpbiocell.sweep
+examples/  tests/  benchmarks/  docs/  configs/
 ```
 
 This may change if a better design emerges. Prefer clarity over abstraction.
@@ -238,6 +238,16 @@ dt_field <= dx² / (6 D)
 With realistic tissue values this is a fraction of a second, against a cell step of minutes to hours, which means tens of thousands of explicit substeps per cell step. Do not assume explicit sub-stepping is viable.
 
 Implemented approach (fields/diffusion.py): oxygen is **quasi-steady-state**, solved at every cell step by red-black SOR with the uptake linearised at the current iterate (`c = rho q_max / (K + O)`, update `O = sum_nb O / (6 + dx² c / D)`), which keeps `O >= 0`. Warm start from the previous step's field; stop at a dimensionless max-norm residual (default 1e-5; the float32 floor is ~5e-7·ω/(2−ω)) checked every `check_every` sweeps (one host sync per check). The explicit FTCS scheme exists as the numerical reference only and refuses `dt > dx²/(6D)`. On the 800 µm / 20 µm spheroid problem a warm-started step needs 10–60 sweeps.
+
+### Tissue geometry (Milestone 7)
+
+A tissue region is a signed-distance field (negative inside) on the oxygen grid, built from a synthetic shape (sphere, ellipsoid, union of spheres) or from a segmentation mask (Euclidean distance transform; `scipy` and `nibabel` are the optional `masks` extra). It is used three ways, each configurable in `geometry`:
+
+* seeding: a jittered lattice fills the region with whole cells (`seed_fill`), optionally only a sub-volume; filling beyond `max_cells` raises `CellBudgetError` with the count;
+* confinement: a cell whose surface pokes out by `p = sdf(x_i) + r_i > 0` is pushed back at `wall_rate * p` along the SDF gradient — the same overdamped law as the cell–cell contact, with its own stability check;
+* oxygen source: with `oxygen_source: tissue_surface` every grid node outside the tissue is pinned to `boundary_mmHg` (a vessel-at-the-surface approximation); `box` keeps the domain faces.
+
+The boundary is rigid: growth inside a fixed region compresses the cells and contact inhibition then stops it. A deformable tissue is the mechanobiology extension in docs/vision.md. No clinical claim is attached to a mask; it is a geometry.
 
 ### Simulation cycle
 

@@ -1,7 +1,7 @@
 # The model: equations, discretisation, assumptions
 
 One place for everything the simulator computes, as implemented on 2026-09-22 (Milestones
-0–5). Code references point at the kernels that implement each equation. Units: µm, h, mmHg.
+0–7). Code references point at the kernels that implement each equation. Units: µm, h, mmHg.
 
 ## 1. State
 
@@ -135,6 +135,29 @@ Validation: uniform field invariant, Gaussian pulse against the analytical solut
 `cosh` profile for linear uptake with Neumann side faces, symmetry, positivity, exact discrete
 solution (dense solve + Picard) and numpy references (`tests/test_fields_*.py`).
 
+## 5b. Tissue region (`geometry/`, `kernels/geometry_kernels.py`)
+
+A region is a signed-distance field `φ(x)` [µm], negative inside, stored on the oxygen grid
+with its node gradient (central differences). Synthetic shapes are evaluated analytically
+(sphere and union exact; ellipsoid by the first-order `f/|∇f|` approximation); masks go
+through two Euclidean distance transforms, `φ = d_outside − d_inside`, with the zero level
+placed half a voxel from the boundary voxels, then nearest-voxel resampling.
+
+Seeding: lattice points with `φ(x) < −(r + margin)` (whole cell inside), optionally also
+inside a sub-volume; the number of cells is reported and capped by `max_cells`.
+
+Confinement, overdamped like the cell–cell contact:
+
+```text
+p_i    = φ(x_i) + r_i                           penetration of the cell surface through the tissue surface
+dx_i/dt += − wall_rate · p_i · ∇φ/|∇φ|          if p_i > 0;   wall_rate · dt_mechanics ≤ 0.5 enforced
+```
+
+Oxygen source: with `oxygen_source: tissue_surface` every node with `φ ≥ 0` is pinned to
+`O_b`; the solver, the residual and the reference scheme all skip pinned nodes exactly like
+Dirichlet faces (`tests/test_geometry.py` checks the pinned solution against the dense exact
+solution).
+
 ## 6. Parameters and provenance
 
 Defaults in `configs/tumor_spheroid.yaml`; labels follow AGENTS.md (illustrative / estimated
@@ -170,4 +193,4 @@ agreement in the biology.
 
 Glucose, lactate, pH and metabolism; adhesion and motility; cell growth and volume changes;
 removal of dead cells; multiple phenotypes; gene networks (Milestone 11); vasculature;
-patient geometry. Each is listed in docs/roadmap.md with its milestone.
+deformable tissue boundaries. Each is listed in docs/roadmap.md with its milestone.

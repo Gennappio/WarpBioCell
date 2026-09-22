@@ -77,7 +77,7 @@ replicates, `docs/model.md` (equations and assumptions in one place), continuous
 
 Profile at 1k, 10k, 100k, 10^6 cells on CUDA. Identify actual bottlenecks. Investigate whether any limitation merits a Warp upstream contribution. The user runs this by uploading the repository to the GPU machine (README, "On a CUDA machine").
 
-### Milestone 7 — Patient geometry
+### Milestone 7 — Patient geometry (done 2026-09-22 for synthetic shapes and voxel masks; a real segmentation not yet exercised)
 
 Segmentation mask → cell initialization inside tissue. Requires an answer to the scale-gap question in [vision.md](vision.md). No clinical claims.
 

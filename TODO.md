@@ -15,9 +15,14 @@ Replace this file's content when the task is done.
   `python -m warpbiocell.run`, run directories, CUDA-vs-CPU test set; first quantitative
   analysis in `docs/results/spheroid_baseline.md`; MicroC parameters recorded in
   `docs/reference/microc_parameters.md` with `configs/microc_oxygen.yaml`.
-* 2026-09-22 — Milestone 5.1: sweep runner (`python -m warpbiocell.sweep`), oxygen-boundary
-  sensitivity study (`docs/results/oxygen_boundary_sweep.md`), `docs/model.md`, GitHub
-  Actions CI.
+* 2026-09-22 — Milestone 5.1: sweep runner, oxygen-boundary sensitivity study
+  (`docs/results/oxygen_boundary_sweep.md`), `docs/model.md`, GitHub Actions CI.
+* 2026-09-22 — Milestone 7, tissue geometry: signed-distance regions from synthetic shapes
+  (sphere, ellipsoid, union) or voxel masks (scipy EDT, NIfTI via nibabel, optional `masks`
+  extra), seeding with a cell budget, confinement by a wall contact law, oxygen pinned on
+  every node outside the tissue, `geometry` config section, cut-away 3-D figure, 95 CPU
+  tests, `configs/tumor_in_ellipsoid.yaml` with `docs/results/tumor_in_ellipsoid.md`;
+  scale-gap numbers measured in `docs/vision.md`.
 
 ## Decisions taken
 
@@ -27,30 +32,33 @@ Replace this file's content when the task is done.
   (`README.md`, "On a CUDA machine"). No GPU numbers before that.
 * Gene regulatory network: last milestone (11), design notes in `docs/vision.md`; no network
   hooks before then (2026-09-22).
+* Patient geometry: synthetic shapes first, masks as a thin loader; the tissue boundary is
+  rigid until the mechanobiology extension (2026-09-22).
 
 ## Open items that need a human decision
 
 * The published spheroid dataset for quantitative validation (cell line, medium O₂, growth
   curve, viable-rim thickness, necrosis onset diameter).
-* Whether Milestone 7 should start with NIfTI masks (needs `nibabel`, a new dependency) or
-  with synthetic geometries (a mesh or an SDF) to build the seeding and confinement
-  machinery first. Default proposal: synthetic first, NIfTI as a thin loader afterwards.
+* A real segmentation mask (NIfTI) to exercise `geometry.shape: mask` end to end; only
+  synthetic voxel masks have been used so far.
+* Milestone 8 needs `usd-core` (pip, ~50 MB) for OpenUSD export; the Isaac for Healthcare
+  demonstrator cannot be built on the development Mac — decide whether Milestone 8 stops at
+  the USD export (proposal: yes, the Isaac part waits for a machine that has it).
 
-## Next: Milestone 7 — patient geometry (Milestone 6 waits for the CUDA machine)
+## Next: Milestone 8 — OpenUSD export (Isaac demonstrator deferred)
 
-docs/roadmap.md; the scale-gap question in docs/vision.md must be answered as part of it.
+docs/roadmap.md "Cellular state → USD".
 
-1. Geometry representation: a signed-distance field on the same kind of regular grid as the
-   oxygen field (`fields/scalar_field.py`), built from a synthetic shape first (sphere,
-   ellipsoid, union of spheres) and later from a segmentation mask.
-2. Seeding: fill the region `sdf < 0` with cells at a target packing (jittered lattice, as
-   `spherical_cluster` does), with an option to seed only a sub-volume.
-3. Confinement: a boundary force in the mechanics kernel from the sampled SDF gradient
-   (cells pushed back inside), documented as a contact law like the cell–cell one.
-4. Field domain: Dirichlet oxygen on the tissue boundary voxels rather than on the box faces
-   (a "vessel at the tissue surface" first approximation), configurable.
-5. Tests: seeding density and containment, SDF sampling exactness for a sphere, a cell
-   pushed out of the region returns, spheroid results unchanged when the region is a large
-   sphere.
-6. Scale gap: measure cells per mm³ at the current packing and state in `docs/vision.md`
-   what sub-volume a 10⁶-cell budget covers; decide coarse-graining later, with data.
+1. `io/export.py`: write a USD stage with a `UsdGeomPointInstancer` (one prototype sphere,
+   per-cell positions and scales, per-cell colour from state or oxygen as a primvar) and one
+   time sample per checkpoint, plus the tissue surface as a mesh (marching cubes of the SDF
+   is more than needed: export the SDF zero level as a point cloud or leave it to the
+   consumer) — start with cells only.
+2. Optional `usd` extra (`usd-core`); export skipped with a clear message when absent.
+3. `python -m warpbiocell.run ... --set output.usd=true` or a post-processing command
+   `python -m warpbiocell.export_usd runs/<dir>` that reads the checkpoints (preferred: keeps
+   export out of the simulation loop, AGENTS.md "Design principles").
+4. Tests: a two-checkpoint run exports a stage whose point count and time samples match the
+   checkpoints (skipped without `usd-core`); no simulation module imports USD.
+5. Then Milestone 9 (metabolic fields: glucose, lactate; MicroC parameters are recorded) or
+   Milestone 6 as soon as the CUDA machine is available.
