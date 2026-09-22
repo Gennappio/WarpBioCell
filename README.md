@@ -28,6 +28,7 @@ python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml \
 python examples/analyze_sweep.py runs/<timestamp>_oxygen_boundary --zero-order-oxygen --figure sweep.png
 python -m warpbiocell.run --config configs/tumor_in_ellipsoid.yaml        # tumour filling an ellipsoidal tissue region
 python -m warpbiocell.export_usd runs/<timestamp>_tumor_in_ellipsoid       # checkpoints -> cells.usdc (OpenUSD point instancer)
+python -m warpbiocell.run --config configs/tumor_spheroid_metabolic.yaml   # spheroid with glucose and lactate (MicroC stoichiometry)
 pytest                                         # CPU-safe suite
 pytest -m gpu                                  # CUDA-only tests (skipped without CUDA)
 python examples/spike_repulsion.py             # 10k cells + HashGrid + overlap repulsion
@@ -67,8 +68,9 @@ allocation, integer deposit); CPU and CUDA agree to float round-off in the physi
 
 ## Status
 
-Milestones 0–8 done and validated on CPU (Milestone 8 stops at the USD export; the Isaac
-for Healthcare demonstrator waits for a machine that has it): cell arrays with preallocated capacity, HashGrid
+Milestones 0–9 done and validated on CPU (Milestone 8 stops at the USD export; Milestone 9
+covers glucose and lactate with per-state rates; the Isaac demonstrator, MCT1/pH and the
+gene network wait): cell arrays with preallocated capacity, HashGrid
 neighbour search, overdamped overlap repulsion, stochastic division/death with deterministic
 daughter allocation, contact inhibition, a quasi-steady oxygen field (red-black SOR with
 Michaelis–Menten uptake) coupled to hypoxia, reduced division and anoxic death, and a

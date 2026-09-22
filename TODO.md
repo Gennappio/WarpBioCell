@@ -22,9 +22,13 @@ Replace this file's content when the task is done.
   `configs/tumor_in_ellipsoid.yaml` + `docs/results/tumor_in_ellipsoid.md`, measured
   scale gap in `docs/vision.md`.
 * 2026-09-22 — Milestone 8 (USD part): `python -m warpbiocell.export_usd <run dir>` writes
-  a point-instancer stage from the checkpoints (positions, radii, stable ids, colour by
-  state or oxygen, tissue surface, grid box; micrometre units, one time code per hour);
-  `usd` extra; checkpoints now carry the tissue SDF; 99 CPU tests.
+  a point-instancer stage from the checkpoints; `usd` extra.
+* 2026-09-22 — Milestone 9 (glucose and lactate): per-state cell densities shared by all
+  species, `SpeciesField` with per-state uptake and production from a source species,
+  `MetabolicFields` manager, `species:` config list, glucose thresholds and MicroC's
+  necrosis rule in the lifecycle, residual relative to the local field magnitude, species
+  metrics/profile columns/figure/USD primvars, 109 CPU tests,
+  `configs/tumor_spheroid_metabolic.yaml` + `docs/results/spheroid_metabolic.md`.
 
 ## Decisions taken
 
@@ -35,41 +39,40 @@ Replace this file's content when the task is done.
 * Gene regulatory network: last milestone (11), design notes in `docs/vision.md`; no network
   hooks before then (2026-09-22).
 * Patient geometry: synthetic shapes first, masks as a thin loader; the tissue boundary is
-  rigid until the mechanobiology extension. A real NIfTI segmentation is **not** needed now:
-  the mask path is covered by synthetic voxel masks and a nibabel roundtrip; the loader's
-  known limitation (affine orientation ignored) is documented and waits for an imaging
-  pipeline (2026-09-22).
-* Milestone 8 stops at the OpenUSD export; the Isaac for Healthcare demonstrator waits for a
-  machine that has Isaac (2026-09-22).
+  rigid until the mechanobiology extension. A real NIfTI segmentation is not needed now.
+* Milestone 8 stops at the OpenUSD export; the Isaac demonstrator waits for a machine with
+  Isaac (2026-09-22).
+* Milestone 9: glucose and lactate as species with per-state rates; MicroC's file value for
+  glucose consumption (3e-15 mol/cell/s) is not used, the stoichiometric rates are
+  (2026-09-22).
 
 ## Open items that need a human decision
 
 * The published spheroid dataset for quantitative validation (cell line, medium O₂, growth
   curve, viable-rim thickness, necrosis onset diameter).
-* Milestone 9 scope: the proposal below adds glucose as a second field with a rule-based
-  metabolic phenotype (no network). Confirm or redirect.
+* Whether the remaining Milestone 9 items (lactate uptake / MCT1, pH, multiple cell types)
+  are worth doing as rules, or should wait for the network (Milestone 11) where MicroC
+  defines them. Proposal: wait.
+* Milestone 10 scope (below): confirm or redirect.
 
-## Next: Milestone 9 — metabolic fields (glucose first)
+## Next: Milestone 10 — the simulator as a tool (OpenCellComms interface)
 
-docs/roadmap.md "Advanced biology"; MicroC's `diffusion-parameters.txt` is the reference set
-(`docs/reference/microc_parameters.md`: glucose D = 6.7e-11 m²/s, uptake 3e-15 mol/cell/s,
-5 mM boundary, 4 mM activation threshold; lactate produced at 3e-15 mol/cell/s, 1 mM boundary).
+docs/roadmap.md "Expose the simulation as a scientific tool". The runner, sweeps and
+`Experiment` exist; what is missing is a machine-readable contract an agent can use without
+reading Python:
 
-1. Generalise the field machinery to several species: `fields/species.py` with a list of
-   `SpeciesField` (name, unit, kinetics, boundary), each reusing `ScalarField`, the deposit and
-   the SOR solver; per-cell sampled values in a `(capacity, n_species)` array or one array per
-   species (prefer one array per species: the kernels stay simple).
-2. Per-state consumption and production: a small table `rate[state, species]` so that hypoxic
-   (glycolytic) cells consume more glucose and produce lactate while oxygenated cells
-   consume oxygen — the rule-based stand-in for MicroC's metabolic network, labelled as such.
-3. Lifecycle: MicroC's necrosis rule (oxygen **and** glucose below their thresholds) as an
-   option next to the current oxygen-only death; glucose-limited division factor.
-4. Units: glucose and lactate in mM; document the conversion of MicroC's mol/cell/s rates.
-5. Tests: two-species steady state against the dense exact solution, conservation of the
-   produced lactate flux, necrosis rule, and the spheroid with glucose (viable rim thinner
-   when glucose is limiting).
-6. Results note: glucose-limited vs oxygen-limited spheroid, compared qualitatively with
-   MicroC's Fig. 6 (glucose and lactate profiles).
+1. `python -m warpbiocell.describe`: the configuration schema as JSON Schema (generated from
+   the dataclasses, with units and provenance labels from the YAML comments where possible),
+   the list of metrics with definitions and units, and the list of bundled configs and sweeps.
+2. `warpbiocell.api`: `run(config: dict | path, overrides, out_dir) -> summary dict`,
+   `sweep(base, spec, out_dir) -> rows`, `analyze(run_dir) -> onsets + final metrics`, all
+   returning plain JSON-serialisable dicts; the CLI commands call these.
+3. An experiment request format (`requests/*.yaml`): hypothesis, base config, overrides or
+   grid, seeds, observables, expected measurement — the provenance fields AGENTS.md
+   "Agent-generated experiments" requires — executed by `python -m warpbiocell.request`.
+4. Tests for the schema (every config key documented), the API round trip, and a request
+   run end to end.
+5. Do not add any LLM call: the agent lives outside (OpenCellComms); WarpBioCell only
+   offers the contract.
 
-Milestone 6 (performance) runs as soon as the CUDA machine is available; Milestone 10
-(OpenCellComms) and 11 (gene network) stay last.
+Then Milestone 6 as soon as the CUDA machine is available; Milestone 11 last.

@@ -39,9 +39,9 @@ Calibrating documented parameters against data is legitimate, provided the param
 
 The MVP contains ONLY: cells as agents, 3D positions, radius, cell type/state, local neighbor detection, proliferation, death, simple contact mechanics, a 3D oxygen field, oxygen consumption, oxygen-dependent behavior, metrics, reproducible experiments, visualization/export.
 
-Do NOT implement yet: glucose, lactate, ATP metabolism, MCT1, intracellular or gene regulatory networks, immune cells, drug pharmacokinetics, vascularization, mutations, spatial transcriptomics, LLM agents, Isaac integration, clinical prediction.
+Do NOT implement yet: ATP metabolism, MCT1 / lactate uptake, intracellular or gene regulatory networks, immune cells, drug pharmacokinetics, vascularization, mutations, spatial transcriptomics, LLM agents, Isaac integration, clinical prediction.
 
-The MVP (Milestones 0–5) is implemented and CPU-validated; GPU numbers wait for the CUDA machine. Work now follows the milestone order in docs/roadmap.md. The gene regulatory network is deliberately the **last** milestone (11): keep the built-in phenotype rules as the only phenotype model until then, and do not add network hooks speculatively.
+The MVP (Milestones 0–5) is implemented and CPU-validated; GPU numbers wait for the CUDA machine. Work now follows the milestone order in docs/roadmap.md: glucose and lactate arrived with Milestone 9 as species with per-state rates (the rule-based metabolic phenotype). The gene regulatory network is deliberately the **last** milestone (11): keep the built-in phenotype rules as the only phenotype model until then, and do not add network hooks speculatively.
 
 ---
 
@@ -77,6 +77,7 @@ uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[d
 .venv/bin/python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml \
     --sweep configs/sweeps/oxygen_boundary.yaml [--dry-run]                        # grid x seeds -> summary.csv
 .venv/bin/python -m warpbiocell.run --config configs/tumor_in_ellipsoid.yaml       # tumour filling a tissue region
+.venv/bin/python -m warpbiocell.run --config configs/tumor_spheroid_metabolic.yaml # spheroid with glucose and lactate
 .venv/bin/python -m warpbiocell.export_usd runs/<run dir> [--out x.usda] [--color oxygen]  # checkpoints -> OpenUSD (usd extra)
 .venv/bin/python examples/analyze_sweep.py runs/<sweep dir> --zero-order-oxygen --figure out.png
 .venv/bin/python examples/spike_repulsion.py           # 10k cells + HashGrid + repulsion
@@ -117,7 +118,8 @@ src/warpbiocell/
     run.py          python -m warpbiocell.run
     cells/          state.py  model.py  initialization.py  lifecycle.py  mechanics.py
     spatial/        neighbors.py
-    fields/         scalar_field.py (grid, boundaries, pinned nodes)  diffusion.py (SOR, FTCS)  oxygen.py (params, coupling)
+    fields/         scalar_field.py (grid, boundaries, pinned nodes)  diffusion.py (SOR, FTCS)  densities.py (per-state cell densities)
+                    species.py (SpeciesParams/SpeciesField: per-state uptake, production)  oxygen.py (OxygenField)  metabolism.py (MetabolicFields)
     geometry/       shapes.py (sphere, ellipsoid, union SDFs)  region.py (TissueRegion)  seeding.py  masks.py (scipy/nibabel, optional)
     kernels/        cell_kernels.py  field_kernels.py  mechanics_kernels.py  geometry_kernels.py
     reference/      slow numpy versions of kernels, used only by tests
@@ -240,6 +242,10 @@ dt_field <= dx² / (6 D)
 With realistic tissue values this is a fraction of a second, against a cell step of minutes to hours, which means tens of thousands of explicit substeps per cell step. Do not assume explicit sub-stepping is viable.
 
 Implemented approach (fields/diffusion.py): oxygen is **quasi-steady-state**, solved at every cell step by red-black SOR with the uptake linearised at the current iterate (`c = rho q_max / (K + O)`, update `O = sum_nb O / (6 + dx² c / D)`), which keeps `O >= 0`. Warm start from the previous step's field; stop at a dimensionless max-norm residual (default 1e-5; the float32 floor is ~5e-7·ω/(2−ω)) checked every `check_every` sweeps (one host sync per check). The explicit FTCS scheme exists as the numerical reference only and refuses `dt > dx²/(6D)`. On the 800 µm / 20 µm spheroid problem a warm-started step needs 10–60 sweeps.
+
+### Metabolic species (Milestone 9)
+
+Any number of diffusible species share the oxygen grid and the per-state cell densities (deposited once per step). A species has per-state Michaelis–Menten uptake `q_max[state] · C/(K + C)` and per-state zero-order production, optionally scaled by `S/(K_S + S)` of an earlier species (lactate from glucose). Species are solved in configuration order; oxygen is always first. The lifecycle reads `oxygen_local` and `glucose_local`: division ramps with glucose between `glucose_death_threshold_mM` and `glucose_threshold_mM`, and with `necrosis_requires_glucose` the anoxic death rate applies only when oxygen and glucose are both below their death thresholds (MicroC's rule). HYPOXIC cells are the glycolytic ones — the rule-based metabolic phenotype that stands in for the network. Rates and provenance: `configs/tumor_spheroid_metabolic.yaml`, `docs/reference/microc_parameters.md`. The solver residual is relative to the local field magnitude, `|r| / max(6C, C_boundary)`, because produced species exceed their boundary value inside the tissue.
 
 ### Tissue geometry (Milestone 7)
 

@@ -85,7 +85,7 @@ Segmentation mask → cell initialization inside tissue. Requires an answer to t
 
 Cellular state → USD, then a small Isaac for Healthcare demonstrator.
 
-### Milestone 9 — Advanced biology (fields and phenotypes)
+### Milestone 9 — Advanced biology (glucose and lactate done 2026-09-22; pH, drug response, spatial omics, multiple cell types open)
 
 Candidates: glucose, lactate, pH, metabolic phenotypes, drug response, spatial omics, multiple cell types. Implement selectively; MicroC's `diffusion-parameters.txt` (docs/reference/microc_parameters.md) is the reference set for the metabolic fields.
 

@@ -1,7 +1,7 @@
 # The model: equations, discretisation, assumptions
 
 One place for everything the simulator computes, as implemented on 2026-09-22 (Milestones
-0–7). Code references point at the kernels that implement each equation. Units: µm, h, mmHg.
+0–9). Code references point at the kernels that implement each equation. Units: µm, h, mmHg.
 
 ## 1. State
 
@@ -122,9 +122,9 @@ O_new  = max((1 − ω) O + ω O_gs, 0)
 ```
 
 which preserves `O ≥ 0` (exactly for ω = 1; the clamp only acts on transients otherwise).
-Warm start from the previous step; stop when the dimensionless max-norm residual
-`|Σ_nb O − (6 + dx²c/D) O| / O_b` falls below `tolerance` (default 1e-5; the float32 floor is
-≈ 5e-7·ω/(2−ω)). An explicit FTCS scheme with the guard `dt ≤ dx²/(6D)` exists as the
+Warm start from the previous step; stop when the max-norm residual relative to the local
+magnitude, `|Σ_nb O + dx²P g/D − (6 + dx²c/D) O| / max(6 O, O_b)`, falls below `tolerance`
+(default 1e-5; the float32 floor is ≈ 1e-7·ω/(2−ω)). An explicit FTCS scheme with the guard `dt ≤ dx²/(6D)` exists as the
 numerical reference only.
 
 Cell ↔ grid transfer: trilinear weights. Deposit accumulates int64 fixed-point weights
@@ -134,6 +134,36 @@ trilinear interpolation, clamped to the grid for cells outside it (which also do
 Validation: uniform field invariant, Gaussian pulse against the analytical solution, 1-D
 `cosh` profile for linear uptake with Neumann side faces, symmetry, positivity, exact discrete
 solution (dense solve + Picard) and numpy references (`tests/test_fields_*.py`).
+
+## 5a. Metabolic species (`fields/species.py`, `fields/metabolism.py`)
+
+Every species `C` obeys the same reaction–diffusion equation with per-state coefficients,
+`n_k(x)` being the number density of cells in state `k` (deposited once per step, int64
+fixed point):
+
+```text
+D ∇²C − Σ_k n_k q_k(C) + Σ_k n_k p_k · g(x) = 0        (quasi-steady)
+q_k(C) = q_max[k] · C/(K + C)                           uptake, Michaelis–Menten
+g(x)   = S/(K_S + S)  for a source species S, else 1     production scaled by the source's uptake factor
+```
+
+Oxygen is the first species (uniform uptake over living states unless `uptake_state_factors`
+says otherwise); glucose and lactate follow in configuration order, so lactate can use the
+glucose solution of the same step as its source. The same red-black SOR handles all of them:
+the effective consuming density `Σ_k w_k n_k` (weights `q_max[k]/max q_max`) and the
+production capacity `Σ_k n_k p_k` are combined on the grid before each solve. Convergence is
+judged by the residual relative to the local magnitude, `|r| / max(6C, C_boundary)`.
+
+Lifecycle coupling with glucose `G`: `P(divide) ∝ oxygen_factor(O) · glucose_factor(G)` with
+the same linear ramp (0 at `glucose_death_threshold`, 1 at `glucose_threshold`), and with
+`necrosis_requires_glucose` the anoxic death rate applies only when `O < death_threshold`
+and `G < glucose_death_threshold` (MicroC's necrosis rule). HYPOXIC cells are glycolytic:
+the phenotype is a rule until the gene network (Milestone 11).
+
+Validation: per-state densities against the reference deposit, the glucose → lactate chain
+against the exact discrete solution (dense solve with production and source), no lactate
+without glycolytic cells or without glucose, the lifecycle rules with prescribed values
+(`tests/test_species.py`).
 
 ## 5b. Tissue region (`geometry/`, `kernels/geometry_kernels.py`)
 
@@ -191,6 +221,6 @@ agreement in the biology.
 
 ## 8. What the model does not contain
 
-Glucose, lactate, pH and metabolism; adhesion and motility; cell growth and volume changes;
-removal of dead cells; multiple phenotypes; gene networks (Milestone 11); vasculature;
+Lactate uptake (MCT1), ATP and pH; adhesion and motility; cell growth and volume changes;
+removal of dead cells; multiple cell types; gene networks (Milestone 11); vasculature;
 deformable tissue boundaries. Each is listed in docs/roadmap.md with its milestone.

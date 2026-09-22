@@ -68,6 +68,26 @@ Boolean network itself (S1 File, GINsim `.zginml`). The network is what turns th
 into Proliferation / Apoptosis / Growth_Arrest / Necrosis; without it, WarpBioCell's built-in
 rules stand in for it (`configs/microc_oxygen.yaml`).
 
-What a like-for-like reproduction still needs beyond oxygen: glucose (D = 67 µm²/s, uptake
-3e-15 mol/cell/s, 5 mM boundary, 4 mM threshold), lactate (produced at 3e-15 mol/cell/s by
-glycolytic cells, 1 mM boundary), H⁺/pH, a 2-D slab geometry, and the network.
+## Glucose and lactate entries used in `configs/tumor_spheroid_metabolic.yaml` (Milestone 9)
+
+The file's "Consumption 3.0e-15" for glucose is far above what the paper's stoichiometry
+implies (it would deplete glucose within ~30 µm of the surface), so the rates come from
+Eqs 2–8 instead, applied to this model's oxygen uptake q_O₂ = 1.4e8 mmHg µm³/h
+(≈ 5e-17 mol/cell/s). Conversion: 1 mM = 1e-18 mol/µm³, so mol/cell/s × 3600 / 1e-18 gives
+mM µm³/h per cell.
+
+| Quantity | MicroC | WarpBioCell value | Label |
+|---|---|---|---|
+| Glucose diffusion | 6.7e-11 m²/s | 2.4e5 µm²/h | literature-derived (MicroC) |
+| Glucose boundary | 5.00 mM | 5.0 mM | literature-derived (MicroC) |
+| Glucose activation threshold (`Glucose_supply`) | 4.0 mM | `glucose_threshold_mM: 4.0` | literature-derived (MicroC) |
+| K_G | 0.04 mM (baseline of S11 Fig) | 0.04 mM | estimated |
+| OXPHOS glucose uptake | q_O₂/6 (Eq. 3) | 3.0e4 mM µm³/h | estimated (stoichiometry) |
+| Glycolytic glucose uptake | q_O₂/6 · A₀/2, A₀ = 30 (Eq. 3) | 4.5e5 mM µm³/h | estimated (stoichiometry) |
+| Lactate production | 2 × glycolytic glucose uptake (Eq. 7) | 9.0e5 mM µm³/h × G/(K_G+G) | estimated (stoichiometry) |
+| Lactate diffusion / boundary | 6.7e-11 m²/s / 1.00 mM | 2.4e5 µm²/h / 1.0 mM | literature-derived (MicroC) |
+| Oxygen uptake of glycolytic cells | K · glycoATP, K = 0.5 | `uptake_state_factors: {hypoxic: 0.5}` | literature-derived (MicroC) |
+| Necrosis | O₂ and glucose below critical values | `necrosis_requires_glucose: true`, glucose death threshold 0.5 mM | rule literature-derived, threshold illustrative |
+
+Still missing for a like-for-like reproduction: lactate uptake by oxygenated cells (MCT1,
+Eq. 8), H⁺/pH, a 2-D slab geometry, the cell-cycle timing, and the network.
