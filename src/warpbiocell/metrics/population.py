@@ -57,13 +57,25 @@ def oxygen_summary(population: CellPopulation, oxygen: OxygenField) -> dict[str,
     }
 
 
-def radial_profile(population: CellPopulation, n_bins: int = 10) -> dict[str, np.ndarray]:
-    """Mean oxygen and state fractions in shells around the population centroid."""
+def radial_profile(
+    population: CellPopulation, n_bins: int | None = None, shell_width: float | None = None
+) -> dict[str, np.ndarray]:
+    """Mean oxygen and state fractions in concentric shells around the population centroid.
+
+    Shells are either ``n_bins`` equal bins up to the outermost cell or of fixed ``shell_width``
+    [um] (constant resolution while the spheroid grows).
+    """
     x = population.positions_numpy()
     r = np.linalg.norm(x - x.mean(axis=0), axis=1)
     o = population.oxygen_numpy()
     s = population.states_numpy()
-    edges = np.linspace(0.0, r.max() + 1e-6, n_bins + 1)
+    r_max = float(r.max()) if r.size else 0.0
+    if shell_width is not None:
+        n_bins = max(1, int(np.ceil((r_max + 1e-6) / shell_width)))
+        edges = shell_width * np.arange(n_bins + 1)
+    else:
+        n_bins = n_bins or 10
+        edges = np.linspace(0.0, r_max + 1e-6, n_bins + 1)
     which = np.minimum(np.digitize(r, edges) - 1, n_bins - 1)
     out = {"r_outer": edges[1:], "cells": np.bincount(which, minlength=n_bins)}
     out["oxygen_mean"] = np.array([o[which == b].mean() if np.any(which == b) else np.nan for b in range(n_bins)])
@@ -72,3 +84,22 @@ def radial_profile(population: CellPopulation, n_bins: int = 10) -> dict[str, np
             [np.mean(s[which == b] == int(state)) if np.any(which == b) else np.nan for b in range(n_bins)]
         )
     return out
+
+
+def shell_radii(profile: dict[str, np.ndarray]) -> dict[str, float]:
+    """Characteristic radii [um] from a radial profile: the outer edge of the outermost shell
+    whose fraction of dead / (hypoxic or dead) / non-proliferative cells is at least one half;
+    0 when no shell qualifies."""
+
+    def outermost(fraction):
+        hit = np.where(np.nan_to_num(fraction) >= 0.5)[0]
+        return float(profile["r_outer"][hit.max()]) if hit.size else 0.0
+
+    dead = profile["fraction_dead"]
+    hypoxic_or_dead = profile["fraction_hypoxic"] + dead
+    non_proliferative = 1.0 - profile["fraction_proliferative"]
+    return {
+        "necrotic_radius": outermost(dead),
+        "hypoxic_radius": outermost(hypoxic_or_dead),
+        "non_proliferative_radius": outermost(non_proliferative),
+    }

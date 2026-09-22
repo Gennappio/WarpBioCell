@@ -12,11 +12,16 @@ license = { text = "Apache-2.0" }
 dependencies = [
     "warp-lang>=1.17",
     "numpy>=1.26",
+    "pyyaml>=6",      # experiment configurations are YAML (AGENTS.md "Configuration and units")
 ]
 
 [project.optional-dependencies]
+plots = [
+    "matplotlib>=3.8",  # run figures; the runner skips them when it is not installed
+]
 dev = [
     "pytest>=8",
+    "matplotlib>=3.8",
 ]
 
 [tool.setuptools.packages.find]

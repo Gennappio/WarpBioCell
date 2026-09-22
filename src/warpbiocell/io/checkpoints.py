@@ -1,0 +1,39 @@
+"""Checkpoints: every persistent cell array plus the field, as a compressed ``.npz``.
+
+The RNG states are included, so a checkpoint carries everything needed to continue a run
+bit-for-bit on the same device (restart logic itself is not implemented yet).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+
+from warpbiocell.cells.state import CellPopulation
+from warpbiocell.fields.oxygen import OxygenField
+
+CELL_ARRAYS = ("position", "radius", "cell_state", "cell_type", "age", "oxygen_local", "rng_state")
+
+
+def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: OxygenField | None, time_h: float) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    n = population.count
+    arrays = {name: getattr(population, name).numpy()[:n].copy() for name in CELL_ARRAYS}
+    arrays["count"] = np.array(n)
+    arrays["capacity"] = np.array(population.capacity)
+    arrays["seed"] = np.array(population.seed)
+    arrays["time_h"] = np.array(time_h)
+    if oxygen is not None:
+        arrays["field"] = oxygen.numpy()
+        arrays["density"] = oxygen.density.numpy()
+        arrays["grid_origin"] = np.array(oxygen.geometry.origin)
+        arrays["grid_dx"] = np.array(oxygen.geometry.dx)
+    np.savez_compressed(path, **arrays)
+    return path
+
+
+def load_checkpoint(path: str | Path) -> dict[str, np.ndarray]:
+    with np.load(Path(path)) as data:
+        return {key: data[key] for key in data.files}
