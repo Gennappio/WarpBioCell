@@ -3,7 +3,10 @@
 Rules (AGENTS.md "Proliferation", "Contact inhibition", "Death"), with O the oxygen sampled
 at the cell [mmHg]:
 
-    death rate          = max(death_rate, anoxic_death_rate)   if O < death_threshold
+    lethal              = O < death_threshold                          (oxygen only), or
+                        = O < death_threshold and G < glucose_death_threshold
+                                                    when necrosis_requires_glucose (MicroC rule)
+    death rate          = max(death_rate, anoxic_death_rate)   if lethal
                         = death_rate                            otherwise
     P(die during dt)    = 1 - exp(-death rate * dt)
     state               = HYPOXIC      if O < hypoxia_threshold
@@ -13,11 +16,14 @@ at the cell [mmHg]:
                         = (O - death_threshold) /
                           (hypoxia_threshold - death_threshold)   in between (linear ramp)
                         = 0                                   for O <= death_threshold
-    P(divide during dt) = 1 - exp(-division_rate * oxygen_factor(O) * dt)   unless crowded
+    glucose_factor(G)   = same ramp between glucose_death_threshold and glucose_threshold
+    P(divide during dt) = 1 - exp(-division_rate * oxygen_factor(O) * glucose_factor(G) * dt)
+                                                                            unless crowded
 
-With both thresholds at 0 and O = 0 (no field attached) the rules reduce to the
-oxygen-independent lifecycle. HYPOXIC cells may still divide at the reduced rate; crowded
-cells never divide, whatever their state.
+O and G are the oxygen [mmHg] and glucose [mM] sampled at the cell. With all thresholds at 0
+and O = G = 0 (no field attached) the rules reduce to the oxygen-independent lifecycle.
+HYPOXIC cells may still divide at the reduced rate; crowded cells never divide, whatever
+their state.
 
 Stated simplifications, to be revisited explicitly:
     * the cell cycle is memoryless: no refractory period after division, no minimum age;
@@ -58,10 +64,14 @@ def lifecycle_decide(
     inhibition_threshold: wp.int32,
     hypoxia_threshold: wp.float32,
     death_threshold: wp.float32,
+    glucose_threshold: wp.float32,
+    glucose_death_threshold: wp.float32,
+    necrosis_requires_glucose: wp.int32,
     cell_state: wp.array(dtype=wp.int32),
     age: wp.array(dtype=wp.float32),
     neighbor_count: wp.array(dtype=wp.int32),
     oxygen_local: wp.array(dtype=wp.float32),
+    glucose_local: wp.array(dtype=wp.float32),
     rng_state: wp.array(dtype=wp.uint32),
     divide_flag: wp.array(dtype=wp.int32),
 ):
@@ -74,12 +84,16 @@ def lifecycle_decide(
     age[i] = age[i] + dt
     rng = rng_state[i]
     o = oxygen_local[i]
+    g = glucose_local[i]
 
     # Death is evaluated first: a cell that dies this step neither divides nor changes state
     # otherwise. The draw is always consumed so the stream advances identically whether or not
     # the death rate is zero.
+    lethal = o < death_threshold
+    if necrosis_requires_glucose != 0:
+        lethal = lethal and (g < glucose_death_threshold)
     rate = death_rate
-    if o < death_threshold:
+    if lethal:
         rate = wp.max(death_rate, anoxic_death_rate)
     p_death = 1.0 - wp.exp(-rate * dt)
     if wp.randf(rng) < p_death:
@@ -96,7 +110,8 @@ def lifecycle_decide(
         cell_state[i] = STATE_PROLIFERATIVE
 
     if not crowded:
-        p_divide = 1.0 - wp.exp(-division_rate * oxygen_factor(o, hypoxia_threshold, death_threshold) * dt)
+        factor = oxygen_factor(o, hypoxia_threshold, death_threshold) * oxygen_factor(g, glucose_threshold, glucose_death_threshold)
+        p_divide = 1.0 - wp.exp(-division_rate * factor * dt)
         if wp.randf(rng) < p_divide:
             divide_flag[i] = 1
 
@@ -115,6 +130,7 @@ def place_daughters(
     cell_type: wp.array(dtype=wp.int32),
     age: wp.array(dtype=wp.float32),
     oxygen_local: wp.array(dtype=wp.float32),
+    glucose_local: wp.array(dtype=wp.float32),
     rng_state: wp.array(dtype=wp.uint32),
     velocity: wp.array(dtype=wp.vec3),
     neighbor_count: wp.array(dtype=wp.int32),
@@ -140,6 +156,7 @@ def place_daughters(
     cell_type[j] = cell_type[i]
     age[j] = 0.0
     oxygen_local[j] = oxygen_local[i]
+    glucose_local[j] = glucose_local[i]
     velocity[j] = wp.vec3(0.0, 0.0, 0.0)
     neighbor_count[j] = 0
     # rng_state[j] was initialised for every slot at population creation and is left untouched.

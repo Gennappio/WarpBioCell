@@ -94,22 +94,34 @@ def neighbor_sum_reference(values):
     return s
 
 
-def ftcs_step_reference(values, density, diffusion, uptake_max, michaelis_k, dx, dt, boundary, fixed_extra=None):
+def _production_term(production, source, source_k, shape):
+    """Zero-order source [conc/h] per node, scaled by S/(K_S + S) of the source field when given."""
+    if production is None:
+        return np.zeros(shape)
+    prod = np.asarray(production, dtype=np.float64)
+    if source is not None:
+        s = np.asarray(source, dtype=np.float64)
+        prod = prod * s / (source_k + s)
+    return prod
+
+
+def ftcs_step_reference(values, density, diffusion, uptake_max, michaelis_k, dx, dt, boundary, fixed_extra=None, production=None, source=None, source_k=1.0):
     v = np.asarray(values, dtype=np.float64)
     fixed = _fixed_mask(v.shape, boundary, fixed_extra)
     lap = diffusion / dx**2 * (neighbor_sum_reference(v) - 6.0 * v)
     uptake = np.asarray(density, dtype=np.float64) * uptake_max * v / (michaelis_k + v)
-    out = v + dt * (lap - uptake)
+    out = v + dt * (lap - uptake + _production_term(production, source, source_k, v.shape))
     out[fixed] = v[fixed]
     return out
 
 
-def steady_state_reference(values0, density, diffusion, uptake_max, michaelis_k, dx, boundary, picard_iterations=30, picard_tol=1e-12, fixed_extra=None):
+def steady_state_reference(values0, density, diffusion, uptake_max, michaelis_k, dx, boundary, picard_iterations=30, picard_tol=1e-12, fixed_extra=None, production=None, source=None, source_k=1.0):
     """Exact solution of the discrete steady-state problem (dense solve + Picard on the uptake)."""
     v = np.asarray(values0, dtype=np.float64).copy()
     density = np.asarray(density, dtype=np.float64)
     shape = v.shape
     fixed = _fixed_mask(shape, boundary, fixed_extra)
+    prod = _production_term(production, source, source_k, shape)
     unknown = np.argwhere(~fixed)
     index = -np.ones(shape, dtype=int)
     for row, (i, j, k) in enumerate(unknown):
@@ -133,6 +145,7 @@ def steady_state_reference(values0, density, diffusion, uptake_max, michaelis_k,
         for row, (i, j, k) in enumerate(unknown):
             c = density[i, j, k] * uptake_max / (michaelis_k + v[i, j, k])
             a[row, row] = -(6.0 + dx**2 * c / diffusion)
+            rhs[row] -= dx**2 * prod[i, j, k] / diffusion
             for node in neighbors(i, j, k):
                 col = index[node]
                 if col >= 0:

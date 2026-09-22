@@ -1,8 +1,16 @@
 """Warp kernels for a regular 3-D scalar field: cell <-> grid transfer and reaction-diffusion.
 
-Equation (AGENTS.md, "Oxygen field"), with ``n`` the number density of consuming cells:
+Equation (AGENTS.md, "Oxygen field"), generalised to any species C with per-state cell
+number densities ``n_k(x)`` (k = cell state):
 
-    dO/dt = D lap(O) - n(x) * q(O),      q(O) = q_max * O / (K + O)      (Michaelis-Menten)
+    dC/dt = D lap(C) - n_eff(x) * q(C) + P(x) * g(x)
+    q(C)  = q_max * C / (K + C)                          Michaelis-Menten uptake
+    n_eff = sum_k f_k n_k                                 effective consuming density
+    P     = sum_k y_k n_k                                 production capacity [conc/h]
+    g     = S / (K_S + S)  for a source species S, or 1   (lactate is made from glucose)
+
+The host combines the per-state densities into ``n_eff`` and ``P`` for each species
+(``combine_densities``), so the solver kernels see one density and one production array.
 
 Discretisation: 7-point Laplacian on cubic voxels of edge ``dx``. Dirichlet faces are never
 written, and neither are nodes flagged in the ``fixed`` mask (e.g. every node outside a
@@ -27,7 +35,6 @@ atomics are associative, so the density does not depend on the order in which th
 
 import warp as wp
 
-from warpbiocell.cells.model import STATE_DEAD
 
 FIXED_ONE = wp.constant(16777216.0)  # 2^24: fixed-point unit for trilinear weights
 FIXED_ONE_INT = 16777216
@@ -74,11 +81,12 @@ def deposit_trilinear(
     cell_state: wp.array(dtype=wp.int32),
     origin: wp.vec3,
     inv_dx: wp.float32,
-    accumulator: wp.array3d(dtype=wp.int64),
+    accumulator: wp.array4d(dtype=wp.int64),  # (state, i, j, k)
 ):
-    """Add each living cell's unit weight to the 8 nodes around it (fixed point)."""
+    """Add each cell's unit weight to the 8 nodes around it, in its state's layer (fixed point)."""
     c = wp.tid()
-    if cell_state[c] == STATE_DEAD:
+    s = cell_state[c]
+    if s < 0 or s >= accumulator.shape[0]:
         return
     u = (position[c] - origin) * inv_dx
     i0 = int(wp.floor(u[0]))
@@ -87,7 +95,7 @@ def deposit_trilinear(
     # Cells outside the grid's trilinear support are ignored (the domain must contain them).
     if i0 < 0 or j0 < 0 or k0 < 0:
         return
-    if i0 + 1 >= accumulator.shape[0] or j0 + 1 >= accumulator.shape[1] or k0 + 1 >= accumulator.shape[2]:
+    if i0 + 1 >= accumulator.shape[1] or j0 + 1 >= accumulator.shape[2] or k0 + 1 >= accumulator.shape[3]:
         return
     fx = u[0] - float(i0)
     fy = u[1] - float(j0)
@@ -105,17 +113,41 @@ def deposit_trilinear(
                 if dk == 0:
                     wz = 1.0 - fz
                 w = wx * wy * wz
-                wp.atomic_add(accumulator, i0 + di, j0 + dj, k0 + dk, wp.int64(int(w * FIXED_ONE + 0.5)))
+                wp.atomic_add(accumulator, s, i0 + di, j0 + dj, k0 + dk, wp.int64(int(w * FIXED_ONE + 0.5)))
 
 
 @wp.kernel
 def fixed_point_to_density(
-    accumulator: wp.array3d(dtype=wp.int64),
+    accumulator: wp.array4d(dtype=wp.int64),
     inv_voxel_volume: wp.float32,
-    density: wp.array3d(dtype=wp.float32),
+    density: wp.array4d(dtype=wp.float32),
 ):
+    s, i, j, k = wp.tid()
+    density[s, i, j, k] = float(accumulator[s, i, j, k]) / FIXED_ONE * inv_voxel_volume
+
+
+@wp.kernel
+def combine_densities(
+    weights: wp.vec4,  # one weight per cell state (NUM_STATES == 4)
+    density: wp.array4d(dtype=wp.float32),
+    out: wp.array3d(dtype=wp.float32),
+):
+    """``out = sum_k weights[k] * density[k]``: effective density or production capacity."""
     i, j, k = wp.tid()
-    density[i, j, k] = float(accumulator[i, j, k]) / FIXED_ONE * inv_voxel_volume
+    out[i, j, k] = (
+        weights[0] * density[0, i, j, k]
+        + weights[1] * density[1, i, j, k]
+        + weights[2] * density[2, i, j, k]
+        + weights[3] * density[3, i, j, k]
+    )
+
+
+@wp.func
+def source_factor(has_source: int, source: wp.array3d(dtype=wp.float32), source_k: float, i: int, j: int, k: int) -> float:
+    if has_source == 0:
+        return 1.0
+    v = source[i, j, k]
+    return v / (source_k + v)
 
 
 @wp.kernel
@@ -161,7 +193,11 @@ def sor_sweep(
     bc_y: int,
     bc_z: int,
     fixed: wp.array3d(dtype=wp.int32),  # 1 where the node holds a prescribed value
-    density: wp.array3d(dtype=wp.float32),  # cells / um^3
+    density: wp.array3d(dtype=wp.float32),  # effective consuming density, cells / um^3
+    production: wp.array3d(dtype=wp.float32),  # production capacity, concentration / h
+    has_source: int,
+    source: wp.array3d(dtype=wp.float32),  # source species field (ignored when has_source == 0)
+    source_k: wp.float32,
     field: wp.array3d(dtype=wp.float32),
 ):
     i, j, k = wp.tid()
@@ -171,7 +207,8 @@ def sor_sweep(
         return
     o = field[i, j, k]
     c = density[i, j, k] * uptake_max / (michaelis_k + o)
-    gs = neighbor_sum(field, i, j, k) / (6.0 + dx2_over_D * c)
+    prod = production[i, j, k] * source_factor(has_source, source, source_k, i, j, k)
+    gs = (neighbor_sum(field, i, j, k) + dx2_over_D * prod) / (6.0 + dx2_over_D * c)
     field[i, j, k] = wp.max((1.0 - omega) * o + omega * gs, 0.0)
 
 
@@ -180,23 +217,30 @@ def steady_state_residual(
     dx2_over_D: wp.float32,
     uptake_max: wp.float32,
     michaelis_k: wp.float32,
-    inv_reference: wp.float32,  # 1 / reference concentration
+    reference: wp.float32,  # concentration scale (the boundary value)
     bc_x: int,
     bc_y: int,
     bc_z: int,
     fixed: wp.array3d(dtype=wp.int32),
     density: wp.array3d(dtype=wp.float32),
+    production: wp.array3d(dtype=wp.float32),
+    has_source: int,
+    source: wp.array3d(dtype=wp.float32),
+    source_k: wp.float32,
     field: wp.array3d(dtype=wp.float32),
     residual: wp.array(dtype=wp.float32),  # one element; max-norm
 ):
-    """Dimensionless residual |sum_nb O - (6 + dx^2 c / D) O| / O_ref over updated nodes."""
+    """Dimensionless residual |sum_nb C + dx^2 P g / D - (6 + dx^2 c / D) C| / max(6 C, C_ref) over
+    updated nodes: relative to the local magnitude where the field is large (produced species can
+    exceed their boundary value many times), to the reference scale where it is depleted."""
     i, j, k = wp.tid()
     if fixed[i, j, k] != 0 or is_fixed(i, j, k, field.shape[0], field.shape[1], field.shape[2], bc_x, bc_y, bc_z):
         return
     o = field[i, j, k]
     c = density[i, j, k] * uptake_max / (michaelis_k + o)
-    r = neighbor_sum(field, i, j, k) - (6.0 + dx2_over_D * c) * o
-    wp.atomic_max(residual, 0, wp.abs(r) * inv_reference)
+    prod = production[i, j, k] * source_factor(has_source, source, source_k, i, j, k)
+    r = neighbor_sum(field, i, j, k) + dx2_over_D * prod - (6.0 + dx2_over_D * c) * o
+    wp.atomic_max(residual, 0, wp.abs(r) / wp.max(6.0 * o, reference))
 
 
 @wp.kernel
@@ -210,6 +254,10 @@ def ftcs_step(
     bc_z: int,
     fixed: wp.array3d(dtype=wp.int32),
     density: wp.array3d(dtype=wp.float32),
+    production: wp.array3d(dtype=wp.float32),
+    has_source: int,
+    source: wp.array3d(dtype=wp.float32),
+    source_k: wp.float32,
     field_in: wp.array3d(dtype=wp.float32),
     field_out: wp.array3d(dtype=wp.float32),
 ):
@@ -221,4 +269,5 @@ def ftcs_step(
         return
     lap = D_over_dx2 * (neighbor_sum(field_in, i, j, k) - 6.0 * o)
     uptake = density[i, j, k] * uptake_max * o / (michaelis_k + o)
-    field_out[i, j, k] = o + dt * (lap - uptake)
+    prod = production[i, j, k] * source_factor(has_source, source, source_k, i, j, k)
+    field_out[i, j, k] = o + dt * (lap - uptake + prod)

@@ -37,9 +37,10 @@ class SolverSettings:
     omega        relaxation factor; 1.0 is Gauss-Seidel, ~1.8 is near-optimal for pure
                  diffusion on ~50 nodes per axis
     max_sweeps   hard budget per solve (each sweep is two colour passes)
-    tolerance    dimensionless max-norm residual (see kernels) at which to stop. In float32
-                 the residual bottoms out around 5e-7 * omega / (2 - omega) (round-off
-                 amplified by over-relaxation), so tolerances below ~5e-6 may never be met.
+    tolerance    dimensionless max-norm residual |r| / max(6 C, C_boundary) (see kernels) at
+                 which to stop. In float32 the residual bottoms out around
+                 1e-7 * omega / (2 - omega) (round-off amplified by over-relaxation), so
+                 tolerances below ~1e-6 may never be met.
                  The solution error can exceed the residual by the problem's condition
                  number; on the spheroid problem the warm start from the previous cell step
                  keeps it far below the biological thresholds.
@@ -67,19 +68,35 @@ class SolveReport:
     converged: bool
 
 
+def _source_args(field: ScalarField, production, source, source_k):
+    """Kernel arguments for the production term; zeros / dummies when the species has none."""
+    prod = production if production is not None else field.fixed_zero_like()
+    has_source = 1 if source is not None else 0
+    src = source if source is not None else field.values
+    return prod, has_source, src, float(source_k)
+
+
 def solve_steady_state(
     field: ScalarField,
     density: wp.array,
     kinetics: UptakeKinetics,
     settings: SolverSettings,
     residual_buffer: wp.array,
+    production: wp.array | None = None,
+    source: wp.array | None = None,
+    source_k: float = 1.0,
 ) -> SolveReport:
-    """Iterate SOR sweeps in place, starting from the field's current values (warm start)."""
+    """Iterate SOR sweeps in place, starting from the field's current values (warm start).
+
+    ``production`` [conc/h] is an optional zero-order source per node, scaled by
+    ``S/(source_k + S)`` of the ``source`` field when one is given.
+    """
     geom = field.geometry
     dx2_over_D = geom.dx**2 / kinetics.diffusion
     bc_x, bc_y, bc_z = field.boundary_flags
     reference = field.boundary_value if field.boundary_value > 0.0 else 1.0
     dev = field.device
+    prod, has_source, src, source_k = _source_args(field, production, source, source_k)
 
     sweeps = 0
     residual = float("inf")
@@ -89,7 +106,7 @@ def solve_steady_state(
                 wp.launch(
                     sor_sweep,
                     dim=geom.shape,
-                    inputs=[color, settings.omega, dx2_over_D, kinetics.uptake_max, kinetics.michaelis_k, bc_x, bc_y, bc_z, field.fixed, density, field.values],
+                    inputs=[color, settings.omega, dx2_over_D, kinetics.uptake_max, kinetics.michaelis_k, bc_x, bc_y, bc_z, field.fixed, density, prod, has_source, src, source_k, field.values],
                     device=dev,
                 )
             sweeps += 1
@@ -97,7 +114,7 @@ def solve_steady_state(
         wp.launch(
             steady_state_residual,
             dim=geom.shape,
-            inputs=[dx2_over_D, kinetics.uptake_max, kinetics.michaelis_k, 1.0 / reference, bc_x, bc_y, bc_z, field.fixed, density, field.values, residual_buffer],
+            inputs=[dx2_over_D, kinetics.uptake_max, kinetics.michaelis_k, reference, bc_x, bc_y, bc_z, field.fixed, density, prod, has_source, src, source_k, field.values, residual_buffer],
             device=dev,
         )
         residual = float(residual_buffer.numpy()[0])
@@ -117,6 +134,9 @@ def explicit_step(
     kinetics: UptakeKinetics,
     dt: float,
     scratch: wp.array,
+    production: wp.array | None = None,
+    source: wp.array | None = None,
+    source_k: float = 1.0,
 ) -> None:
     """One FTCS step; writes into ``scratch`` then copies back so ``field.values`` stays the same array."""
     limit = max_stable_dt(field, kinetics)
@@ -124,10 +144,11 @@ def explicit_step(
         raise ValueError(f"dt = {dt:.3g} h exceeds the explicit stability limit dx^2/(6D) = {limit:.3g} h")
     geom = field.geometry
     bc_x, bc_y, bc_z = field.boundary_flags
+    prod, has_source, src, source_k = _source_args(field, production, source, source_k)
     wp.launch(
         ftcs_step,
         dim=geom.shape,
-        inputs=[dt, kinetics.diffusion / geom.dx**2, kinetics.uptake_max, kinetics.michaelis_k, bc_x, bc_y, bc_z, field.fixed, density, field.values, scratch],
+        inputs=[dt, kinetics.diffusion / geom.dx**2, kinetics.uptake_max, kinetics.michaelis_k, bc_x, bc_y, bc_z, field.fixed, density, prod, has_source, src, source_k, field.values, scratch],
         device=field.device,
     )
     wp.copy(field.values, scratch)

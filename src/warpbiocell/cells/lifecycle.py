@@ -31,6 +31,12 @@ class LifecycleParams:
                                           anchor, estimated
     death_threshold        [mmHg]         below it the anoxic death rate applies and division
                                           stops; illustrative
+    glucose_threshold      [mM]           division ramps down below it (MicroC's Glucose_supply
+                                          activation threshold is 4 mM); 0 disables
+    glucose_death_threshold [mM]          with necrosis_requires_glucose, cells die at the anoxic
+                                          rate only when oxygen AND glucose are below their death
+                                          thresholds (MicroC's necrosis rule); 0 disables
+    necrosis_requires_glucose             see above; default False (oxygen-only death)
     placement_factor       [-]            centre-to-centre distance of the new pair as a
                                           multiple of the parent radius (1.0 = one radius apart,
                                           i.e. an initial overlap of one radius that the
@@ -45,6 +51,9 @@ class LifecycleParams:
     inhibition_threshold: int = 8
     hypoxia_threshold: float = 0.0
     death_threshold: float = 0.0
+    glucose_threshold: float = 0.0
+    glucose_death_threshold: float = 0.0
+    necrosis_requires_glucose: bool = False
     placement_factor: float = 1.0
 
     def __post_init__(self):
@@ -54,6 +63,8 @@ class LifecycleParams:
             raise ValueError("inhibition_threshold must be at least 1")
         if self.death_threshold < 0.0 or self.hypoxia_threshold < self.death_threshold:
             raise ValueError("need 0 <= death_threshold <= hypoxia_threshold")
+        if self.glucose_death_threshold < 0.0 or self.glucose_threshold < self.glucose_death_threshold:
+            raise ValueError("need 0 <= glucose_death_threshold <= glucose_threshold")
         if self.placement_factor <= 0.0:
             raise ValueError("placement_factor must be positive")
 
@@ -91,10 +102,14 @@ def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: floa
             params.inhibition_threshold,
             params.hypoxia_threshold,
             params.death_threshold,
+            params.glucose_threshold,
+            params.glucose_death_threshold,
+            1 if params.necrosis_requires_glucose else 0,
             population.cell_state,
             population.age,
             population.neighbor_count,
             population.oxygen_local,
+            population.glucose_local,
             population.rng_state,
         ],
         outputs=[population.divide_flag],
@@ -125,6 +140,7 @@ def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: floa
             population.cell_type,
             population.age,
             population.oxygen_local,
+            population.glucose_local,
             population.rng_state,
             population.velocity,
             population.neighbor_count,

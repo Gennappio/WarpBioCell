@@ -104,6 +104,14 @@ class ScalarField:
     def fixed_mask(self) -> np.ndarray:
         return self.fixed.numpy().astype(bool)
 
+    def fixed_zero_like(self) -> wp.array:
+        """A zero float array of the grid shape, allocated once (dummy production term)."""
+        zero = getattr(self, "_zero", None)
+        if zero is None:
+            zero = wp.zeros(self.geometry.shape, dtype=wp.float32, device=self.device)
+            object.__setattr__(self, "_zero", zero)
+        return zero
+
     @property
     def boundary_flags(self) -> tuple[int, int, int]:
         return tuple(int(b) for b in self.boundary)

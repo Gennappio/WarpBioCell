@@ -14,7 +14,7 @@ Randomness: every cell owns a counter-based RNG stream ``rand_init(seed, slot)``
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import warp as wp
@@ -41,12 +41,14 @@ class CellPopulation:
     cell_type: wp.array  # int32, CellType
     age: wp.array  # float32, h since birth (or since initialization)
     oxygen_local: wp.array  # float32, mmHg sampled at the cell centre (0 until a field writes it)
+    glucose_local: wp.array  # float32, mM sampled at the cell centre (0 until a field writes it)
     rng_state: wp.array  # uint32, per-cell RNG stream
     # Per-step outputs and scratch
     velocity: wp.array  # vec3, um/h; overdamped, recomputed from contacts each substep
     neighbor_count: wp.array  # int32, cells within the query radius in the last mechanics substep
     divide_flag: wp.array  # int32, 1 if the cell divides this step
     division_offset: wp.array  # int32, inclusive prefix sum of divide_flag
+    extra_local: dict = field(default_factory=dict)  # name -> float32 array for other sampled species
 
     @classmethod
     def from_numpy(
@@ -94,6 +96,7 @@ class CellPopulation:
             cell_type=wp.full(capacity, int(CellType.TUMOR), dtype=wp.int32, device=device),
             age=wp.zeros(capacity, dtype=wp.float32, device=device),
             oxygen_local=wp.zeros(capacity, dtype=wp.float32, device=device),
+            glucose_local=wp.zeros(capacity, dtype=wp.float32, device=device),
             rng_state=wp.zeros(capacity, dtype=wp.uint32, device=device),
             velocity=wp.zeros(capacity, dtype=wp.vec3, device=device),
             neighbor_count=wp.zeros(capacity, dtype=wp.int32, device=device),
@@ -129,6 +132,23 @@ class CellPopulation:
 
     def oxygen_numpy(self) -> np.ndarray:
         return self.oxygen_local.numpy()[: self.count].copy()
+
+    def glucose_numpy(self) -> np.ndarray:
+        return self.glucose_local.numpy()[: self.count].copy()
+
+    def local_field(self, name: str) -> wp.array:
+        """Per-cell sampled values of a species: oxygen and glucose are first-class, others are
+        allocated on first use (capacity-sized, so no reallocation in the loop)."""
+        if name == "oxygen":
+            return self.oxygen_local
+        if name == "glucose":
+            return self.glucose_local
+        if name not in self.extra_local:
+            self.extra_local[name] = wp.zeros(self.capacity, dtype=wp.float32, device=self.device)
+        return self.extra_local[name]
+
+    def local_numpy(self, name: str) -> np.ndarray:
+        return self.local_field(name).numpy()[: self.count].copy()
 
     def neighbor_counts_numpy(self) -> np.ndarray:
         return self.neighbor_count.numpy()[: self.count].copy()

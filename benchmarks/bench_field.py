@@ -59,11 +59,11 @@ def bench_grid(nodes, n_cells, device, repeats, warmup):
 
     def sweep():
         for color in (0, 1):
-            wp.launch(sor_sweep, dim=geom.shape, inputs=[color, 1.8, dx2_over_D, kin.uptake_max, kin.michaelis_k, *bc, ox.field.fixed, ox.density, ox.values], device=device)
+            wp.launch(sor_sweep, dim=geom.shape, inputs=[color, 1.8, dx2_over_D, kin.uptake_max, kin.michaelis_k, *bc, ox.field.fixed, ox.density, ox.production, 0, ox.values, 1.0, ox.values], device=device)
 
     def residual():
         ox._residual.zero_()
-        wp.launch(steady_state_residual, dim=geom.shape, inputs=[dx2_over_D, kin.uptake_max, kin.michaelis_k, 1.0 / params.boundary_value, *bc, ox.field.fixed, ox.density, ox.values, ox._residual], device=device)
+        wp.launch(steady_state_residual, dim=geom.shape, inputs=[dx2_over_D, kin.uptake_max, kin.michaelis_k, params.boundary_value, *bc, ox.field.fixed, ox.density, ox.production, 0, ox.values, 1.0, ox.values, ox._residual], device=device)
         return float(ox._residual.numpy()[0])
 
     def sample():
