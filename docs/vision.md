@@ -151,7 +151,7 @@ MRI → segmented tumor → initial cellular state → GPU ABM
 
 A useful north star, not an MVP requirement.
 
-### Gene network per cell (Milestone 11, design notes)
+### Gene network per cell (Milestone 11, design notes — implemented 2026-09-22, see model.md §4b)
 
 Decided 2026-09-22: a Boolean gene regulatory network inside every agent is worth building
 — it is what makes MicroC's gene-perturbation experiments (knockouts, overexpression, p53,
@@ -176,6 +176,15 @@ Design to follow when the time comes:
 * validation: toy networks with known attractors (exact, synchronous), a single MaBoSS node
   against the analytical two-state Markov chain (statistical), a small network against MaBoSS
   itself when its Python package is available, then the MicroC network with oxygen inputs only.
+
+What was built follows this design, with two differences: the MicroC network came as MaBoSS
+`.bnd/.cfg` from the OpenCellComms `MicroC` adapter (unit rates, so its `maboss` mode and the
+asynchronous mode are the same process); and the comparison against the MaBoSS binary is
+still open — the closed-form checks (single-node kinetics, flip probabilities, agreement of
+the two modes on the 106-node network) stand in. Measured on the CPU: the 106-node network
+at 200 asynchronous picks per step costs ~10 µs per cell per step (2000 cells: 22 ms), the
+Gillespie mode ~80 µs per cell for 5 time units; both are per-cell loops that map directly
+onto GPU threads.
 
 Related prior art: PhysiBoSS (PhysiCell + MaBoSS, CPU); a GPU MaBoSS for networks alone has
 been published (to verify); a per-agent network inside a spatial GPU ABM with coupled fields

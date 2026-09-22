@@ -1,0 +1,120 @@
+# Metabolic spheroid driven by MicroC's Boolean gene network (Milestone 11). Every cell runs
+# the 106-node network of Jayathilake et al. 2024 (configs/networks/microc_jaya.bnd, unit
+# MaBoSS rates); the fields set its input nodes and its fate nodes decide the phenotype:
+#
+#   Oxygen_supply  ON when O2 > 15.7 mmHg (MicroC 0.022 = 2.2 % O2)      literature-derived
+#   Glucose_supply ON when glucose > 4.0 mM                               literature-derived
+#   MCT1_stimulus  ON when lactate > 1.5 mM                                literature-derived
+#   growth-factor stimuli constant ON, DNA damage and growth inhibitor OFF (MicroC defaults)
+#
+#   Proliferation  -> the cell may divide (rate division_rate_per_h while the node is ON)
+#   Growth_Arrest  -> no division (QUIESCENT)
+#   Apoptosis      -> death at apoptosis_rate_per_h while ON
+#   Necrosis       -> death at necrosis_rate_per_h while ON (= !Oxygen_supply & !Cell_Glucose)
+#
+# Under normoxia and glucose the network's stationary distribution has Proliferation ON in
+# ~20 % of the cells (p53 and ERK keep cycling; docs/results/spheroid_network.md), so the
+# division rate while ON is set to 0.1/h for an effective ~0.02/h. Metabolic fields as in
+# tumor_spheroid_metabolic.yaml; HYPOXIC (glycolytic, half oxygen uptake) is the state of
+# cells whose Oxygen_supply node is OFF.
+
+name: tumor_spheroid_network
+
+simulation:
+  duration_h: 168
+  dt_cells_h: 0.25
+  dt_mechanics_h: 0.025
+  seed: 0
+  device: auto
+
+cells:
+  initial_count: 1000
+  max_cells: 200000
+  radius_um: 8.0
+  initial_spacing_factor: 1.0
+  initial_jitter: 0.1
+
+mechanics:
+  stiffness: 10.0
+  damping: 1.0
+  margin_um: 2.0
+
+lifecycle:
+  phenotype_model: network
+  division_rate_per_h: 0.1             # while Proliferation is ON; illustrative (see header)
+  death_rate_per_h: 0.0
+  apoptosis_rate_per_h: 0.02           # while Apoptosis is ON; illustrative
+  necrosis_rate_per_h: 0.2             # while Necrosis is ON; illustrative
+  anoxic_death_rate_per_h: 0.5         # environmental necrosis (MicroC rule below); illustrative
+  inhibition_threshold: 8
+  hypoxia_threshold_mmHg: 15.7         # HYPOXIC state = Oxygen_supply OFF; literature-derived
+  death_threshold_mmHg: 15.7           # with necrosis_requires_glucose: O2 below this AND ...
+  glucose_threshold_mM: 4.0            # (unused in network mode: the network reads Glucose_supply)
+  glucose_death_threshold_mM: 0.23     # ... glucose below MicroC's necrosis threshold; literature-derived
+  necrosis_requires_glucose: true
+  placement_factor: 1.0
+
+oxygen:
+  enabled: true
+  diffusion_um2_per_h: 7.2e+6
+  uptake_max_mmHg_um3_per_h: 1.4e+8
+  michaelis_k_mmHg: 3.4
+  boundary_mmHg: 38.0
+  uptake_state_factors:
+    hypoxic: 0.5                       # MicroC K * glycoATP; literature-derived
+  grid:
+    box_um: 800.0
+    dx_um: 20.0
+  solver:
+    omega: 1.8
+    tolerance: 1.0e-5
+    max_sweeps: 2000
+    check_every: 10
+
+species:
+  - name: glucose
+    unit: mM
+    diffusion_um2_per_h: 2.4e+5
+    michaelis_k: 0.04
+    boundary_value: 5.0
+    uptake_max_by_state:
+      proliferative: 3.0e+4
+      quiescent: 3.0e+4
+      hypoxic: 4.5e+5
+  - name: lactate
+    unit: mM
+    diffusion_um2_per_h: 2.4e+5
+    michaelis_k: 1.0
+    boundary_value: 1.0
+    production_by_state:
+      hypoxic: 9.0e+5
+    production_source: glucose
+
+network:
+  enabled: true
+  file: networks/microc_jaya.bnd       # relative to this file
+  cfg: networks/microc_jaya.cfg        # unit rates, genes start ON with probability 0.5
+  update: asynchronous                 # = MaBoSS with unit rates; 200 picks/step ~ 2.5 time units
+  updates_per_step: 200
+  inputs:
+    - {node: Oxygen_supply, source: oxygen, threshold: 15.7}
+    - {node: Glucose_supply, source: glucose, threshold: 4.0}
+    - {node: MCT1_stimulus, source: lactate, threshold: 1.5}
+    - {node: EGFR_stimulus, source: constant, threshold: 1.0}
+    - {node: cMET_stimulus, source: constant, threshold: 1.0}
+    - {node: FGFR_stimulus, source: constant, threshold: 1.0}
+    - {node: TGFBR_stimulus, source: constant, threshold: 0.0}
+    - {node: DNA_damage, source: constant, threshold: 0.0}
+    - {node: Growth_Inhibitor, source: constant, threshold: 0.0}
+  outputs:
+    proliferation: Proliferation
+    apoptosis: Apoptosis
+    growth_arrest: Growth_Arrest
+    necrosis: Necrosis
+
+output:
+  metrics_every_h: 1.0
+  profile_every_h: 12.0
+  checkpoint_every_h: 24.0
+  shell_width_um: 20.0
+  figures: true

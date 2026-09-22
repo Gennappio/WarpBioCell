@@ -29,6 +29,7 @@ python examples/analyze_sweep.py runs/<timestamp>_oxygen_boundary --zero-order-o
 python -m warpbiocell.run --config configs/tumor_in_ellipsoid.yaml        # tumour filling an ellipsoidal tissue region
 python -m warpbiocell.export_usd runs/<timestamp>_tumor_in_ellipsoid       # checkpoints -> cells.usdc (OpenUSD point instancer)
 python -m warpbiocell.run --config configs/tumor_spheroid_metabolic.yaml   # spheroid with glucose and lactate (MicroC stoichiometry)
+python -m warpbiocell.run --config configs/tumor_spheroid_network.yaml     # every cell runs MicroC's 106-node Boolean gene network
 pytest                                         # CPU-safe suite
 pytest -m gpu                                  # CUDA-only tests (skipped without CUDA)
 python examples/spike_repulsion.py             # 10k cells + HashGrid + overlap repulsion
@@ -75,15 +76,17 @@ allocation, integer deposit); CPU and CUDA agree to float round-off in the physi
 
 ## Status
 
-Milestones 0–9 done and validated on CPU (Milestone 8 stops at the USD export; Milestone 9
-covers glucose and lactate with per-state rates; the Isaac demonstrator, MCT1/pH and the
-gene network wait): cell arrays with preallocated capacity, HashGrid
-neighbour search, overdamped overlap repulsion, stochastic division/death with deterministic
-daughter allocation, contact inhibition, a quasi-steady oxygen field (red-black SOR with
-Michaelis–Menten uptake) coupled to hypoxia, reduced division and anoxic death, and a
-reproducible experiment runner and sweeps, and tissue regions (synthetic shapes or
-segmentation masks) with seeding, confinement and a tissue-surface oxygen source. The
-baseline spheroid produces growth → oxygen gradient → hypoxia → necrotic core with a stable
-viable rim, all emergent from the rules; numbers in
-[docs/results/](docs/results/). Next: see [TODO.md](TODO.md). Design notes:
-[docs/architecture_spike.md](docs/architecture_spike.md), model in [docs/model.md](docs/model.md).
+Milestones 0–5, 7–11 done and validated on CPU (Milestone 6, performance, waits for the
+CUDA machine; Milestone 8 stops at the USD export; the Isaac demonstrator, MCT1 uptake and
+pH wait): cell arrays with preallocated capacity, HashGrid neighbour search, overdamped
+overlap repulsion, stochastic division/death with deterministic daughter allocation, contact
+inhibition, quasi-steady oxygen / glucose / lactate fields (red-black SOR with
+Michaelis–Menten uptake and production) coupled to hypoxia, reduced division and anoxic
+death, tissue regions (synthetic shapes or segmentation masks) with seeding, confinement and
+a tissue-surface oxygen source, a per-cell Boolean gene network (MaBoSS / BoolNet models,
+asynchronous, synchronous or Gillespie updates) that can replace the phenotype rules, an
+OpenCellComms adapter, and a reproducible experiment runner with sweeps. The baseline
+spheroid produces growth → oxygen gradient → hypoxia → necrotic core with a stable viable
+rim, all emergent from the rules; numbers in [docs/results/](docs/results/). Next: see
+[TODO.md](TODO.md). Design notes: [docs/architecture_spike.md](docs/architecture_spike.md),
+model in [docs/model.md](docs/model.md).

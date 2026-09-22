@@ -48,6 +48,7 @@ class CellPopulation:
     neighbor_count: wp.array  # int32, cells within the query radius in the last mechanics substep
     divide_flag: wp.array  # int32, 1 if the cell divides this step
     division_offset: wp.array  # int32, inclusive prefix sum of divide_flag
+    fate_flags: wp.array  # int32, bits from the gene network's fate nodes (0 without a network)
     extra_local: dict = field(default_factory=dict)  # name -> float32 array for other sampled species
 
     @classmethod
@@ -102,6 +103,7 @@ class CellPopulation:
             neighbor_count=wp.zeros(capacity, dtype=wp.int32, device=device),
             divide_flag=wp.zeros(capacity, dtype=wp.int32, device=device),
             division_offset=wp.zeros(capacity, dtype=wp.int32, device=device),
+            fate_flags=wp.zeros(capacity, dtype=wp.int32, device=device),
         )
         # Streams for free slots are initialized too, so a daughter born into slot j uses the
         # same stream whether it appears at step 3 or step 300.
@@ -152,3 +154,6 @@ class CellPopulation:
 
     def neighbor_counts_numpy(self) -> np.ndarray:
         return self.neighbor_count.numpy()[: self.count].copy()
+
+    def fate_flags_numpy(self) -> np.ndarray:
+        return self.fate_flags.numpy()[: self.count].copy()

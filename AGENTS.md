@@ -40,9 +40,9 @@ Calibrating documented parameters against data is legitimate, provided the param
 
 The MVP contains ONLY: cells as agents, 3D positions, radius, cell type/state, local neighbor detection, proliferation, death, simple contact mechanics, a 3D oxygen field, oxygen consumption, oxygen-dependent behavior, metrics, reproducible experiments, visualization/export.
 
-Do NOT implement yet: ATP metabolism, MCT1 / lactate uptake, intracellular or gene regulatory networks, immune cells, drug pharmacokinetics, vascularization, mutations, spatial transcriptomics, LLM agents, Isaac integration, clinical prediction.
+Do NOT implement yet: ATP as a quantity, MCT1 / lactate uptake, pH, immune cells, drug pharmacokinetics, vascularization, mutations, spatial transcriptomics, LLM agents, Isaac integration, clinical prediction.
 
-The MVP (Milestones 0–5) is implemented and CPU-validated; GPU numbers wait for the CUDA machine. Work now follows the milestone order in docs/roadmap.md: glucose and lactate arrived with Milestone 9 as species with per-state rates (the rule-based metabolic phenotype). The gene regulatory network is deliberately the **last** milestone (11): keep the built-in phenotype rules as the only phenotype model until then, and do not add network hooks speculatively.
+The MVP (Milestones 0–5) is implemented and CPU-validated; GPU numbers wait for the CUDA machine. Glucose and lactate arrived with Milestone 9 as species with per-state rates (the rule-based metabolic phenotype); the per-cell Boolean gene network arrived with Milestone 11 as the alternative `network` phenotype model (see "Gene network per cell" below). Both phenotype models stay: `rules` for the interpretable minimal model, `network` for MicroC's gene-level experiments. Do not add a third one without a documented question.
 
 ---
 
@@ -247,6 +247,10 @@ Implemented approach (fields/diffusion.py): oxygen is **quasi-steady-state**, so
 ### Metabolic species (Milestone 9)
 
 Any number of diffusible species share the oxygen grid and the per-state cell densities (deposited once per step). A species has per-state Michaelis–Menten uptake `q_max[state] · C/(K + C)` and per-state zero-order production, optionally scaled by `S/(K_S + S)` of an earlier species (lactate from glucose). Species are solved in configuration order; oxygen is always first. The lifecycle reads `oxygen_local` and `glucose_local`: division ramps with glucose between `glucose_death_threshold_mM` and `glucose_threshold_mM`, and with `necrosis_requires_glucose` the anoxic death rate applies only when oxygen and glucose are both below their death thresholds (MicroC's rule). HYPOXIC cells are the glycolytic ones — the rule-based metabolic phenotype that stands in for the network. Rates and provenance: `configs/tumor_spheroid_metabolic.yaml`, `docs/reference/microc_parameters.md`. The solver residual is relative to the local field magnitude, `|r| / max(6C, C_boundary)`, because produced species exceed their boundary value inside the tissue.
+
+### Gene network per cell (Milestone 11)
+
+Every cell runs the same Boolean network (`network/`, `kernels/network_kernels.py`): nodes as bits in uint64 words, logic as postfix programs interpreted in the kernels, three update semantics (asynchronous random single-node updates, synchronous sweeps, MaBoSS continuous-time chain by Gillespie), inputs clamped from the sampled fields or constants, fate nodes packed into `fate_flags`. With `lifecycle.phenotype_model: network` the fate nodes decide (`Proliferation` may divide, `Growth_Arrest` blocks it, `Apoptosis`/`Necrosis` set death rates); with `rules` the network only reports. The MicroC network of Jayathilake et al. 2024 is in `configs/networks/` (MaBoSS `.bnd/.cfg`, 106 nodes, 25 inputs); `configs/tumor_spheroid_network.yaml` drives it with oxygen, glucose and lactate. Models come from MaBoSS or BoolNet files exported by GINsim — no network is hand-written in Python. Node semantics belong to the model file, not to the code: do not special-case node names in kernels beyond the configured input/output mapping. Equations and validation: docs/model.md §4b.
 
 ### Tissue geometry (Milestone 7)
 

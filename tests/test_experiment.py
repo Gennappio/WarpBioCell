@@ -10,7 +10,7 @@ import pytest
 from warpbiocell import run as run_module
 from warpbiocell.io.checkpoints import load_checkpoint
 from warpbiocell.io.run_output import METRIC_COLUMNS, PROFILE_COLUMNS
-from warpbiocell.simulation.config import config_from_dict
+from warpbiocell.simulation.config import ConfigError, config_from_dict
 from warpbiocell.simulation.experiment import Experiment
 
 REPO_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "tumor_spheroid.yaml"
@@ -139,3 +139,40 @@ def test_command_line_runner_reports_config_errors(tmp_path, capsys):
 @pytest.mark.parametrize("bad", [["--config", "does_not_exist.yaml"]])
 def test_missing_config_file(bad, tmp_path):
     assert run_module.main(bad + ["--out", str(tmp_path)]) == 2
+
+
+def test_network_experiment_records_fates_and_checkpoints(tmp_path):
+    from warpbiocell.simulation.config import load_config
+
+    config = load_config(
+        REPO_CONFIG.parent / "tumor_spheroid_network.yaml",
+        ["simulation.duration_h=1.0", "simulation.device=cpu", "cells.initial_count=200", "cells.max_cells=2000", "oxygen.grid.box_um=400.0", "output.figures=false", "output.checkpoint_every_h=1.0"],
+    )
+    assert config.validate() == []
+    result = Experiment(config).run(tmp_path / "run")
+    assert result.status == "completed"
+    rows = _read_csv(tmp_path / "run" / "metrics.csv")
+    fates = ["network_proliferation_cells", "network_apoptosis_cells", "network_growth_arrest_cells", "network_necrosis_cells"]
+    assert all(int(row[c]) >= 0 for row in rows for c in fates)
+    assert int(rows[-1]["network_necrosis_cells"]) == 0  # well-supplied small cluster
+    assert 0 < int(rows[-1]["network_proliferation_cells"]) < int(rows[-1]["living_cells"])
+    metadata = json.loads((tmp_path / "run" / "metadata.json").read_text())
+    assert metadata["network"]["nodes"] == 106 and metadata["network"]["phenotype_model"] == "network"
+    checkpoint = np.load(sorted((tmp_path / "run" / "checkpoint").glob("*.npz"))[-1])
+    assert checkpoint["network_states"].shape == (int(rows[-1]["cells"]), 2)
+    assert checkpoint["network_nodes"].shape == (106,) and checkpoint["fate_flags"].shape[0] == int(rows[-1]["cells"])
+
+
+def test_network_config_validation():
+    with pytest.raises(ConfigError):
+        _tiny(**{"lifecycle.phenotype_model": "network"}).validate()  # no network section
+    data = {"network": {"enabled": True, "file": str(REPO_CONFIG.parent / "networks" / "microc_jaya.bnd"), "inputs": [{"node": "Oxygen_supply", "source": "lactate", "threshold": 1.0}]}}
+    with pytest.raises(ConfigError):
+        config_from_dict({**data}).validate()  # lactate is not a species here
+    data["network"]["inputs"][0]["source"] = "oxygen"
+    data["network"]["inputs"].append({"node": "Nope", "source": "constant"})
+    with pytest.raises(ConfigError):
+        config_from_dict({**data}).validate()  # unknown node
+    data["network"]["inputs"].pop()
+    warnings = config_from_dict(data).validate()
+    assert any("phenotype_model = rules" in w for w in warnings)  # network runs, rules decide

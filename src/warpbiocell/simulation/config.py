@@ -22,6 +22,8 @@ from warpbiocell.fields.diffusion import SolverSettings
 from warpbiocell.fields.oxygen import OxygenParams
 from warpbiocell.fields.scalar_field import GridGeometry
 from warpbiocell.fields.species import SpeciesParams, by_state
+from warpbiocell.network.model import BooleanNetwork, load_network
+from warpbiocell.network.runtime import InputClamp, NetworkParams
 from warpbiocell.simulation.simulator import TimeStepping
 
 
@@ -67,6 +69,9 @@ class LifecycleConfig:
     glucose_death_threshold_mM: float = 0.0  # with necrosis_requires_glucose: death needs O2 AND glucose below thresholds
     necrosis_requires_glucose: bool = False  # MicroC's necrosis rule
     placement_factor: float = 1.0
+    phenotype_model: str = "rules"  # rules | network (the network section must be enabled)
+    apoptosis_rate_per_h: float = 0.0  # network mode: death rate while the Apoptosis fate node is ON
+    necrosis_rate_per_h: float = 0.0  # network mode: death rate while the Necrosis fate node is ON
 
 
 @dataclass(frozen=True)
@@ -160,6 +165,52 @@ class GeometryConfig:
 
 
 @dataclass(frozen=True)
+class NetworkInputConfig:
+    """An input node clamped from the environment every step.
+
+    source     oxygen | glucose | <name of one of the first two other species> | constant
+    threshold  the node is ON when the value sampled at the cell is above it (below it with
+               ``above: false``); for ``constant`` the node is ON when threshold > 0
+    """
+
+    node: str = ""
+    source: str = "oxygen"
+    threshold: float = 0.0
+    above: bool = True
+
+
+@dataclass(frozen=True)
+class NetworkConfig:
+    """Per-cell Boolean gene network (Milestone 11), see docs/model.md section 4b.
+
+    file                 MaBoSS ``.bnd`` or BoolNet ``.bnet`` model (relative to the config file)
+    cfg                  MaBoSS ``.cfg`` with ``$variables`` and initial states (optional)
+    update               asynchronous (random single-node updates, = MaBoSS with unit rates) |
+                         synchronous (whole-network sweeps) | maboss (continuous-time Markov
+                         chain with the model's rates, Gillespie)
+    updates_per_step     asynchronous: single-node updates per cell step; synchronous: sweeps
+    time_units_per_h     maboss: network time units simulated per simulated hour
+    max_events_per_step  maboss: cap on Gillespie events per cell per step
+    inputs               list of NetworkInputConfig
+    outputs              fate role (proliferation, apoptosis, growth_arrest, necrosis) -> node
+                         name, or null for a role the network has no node for; empty: the
+                         conventional names (Proliferation, ...) that exist in the network
+    initial_states       node -> probability of starting ON (overrides the .cfg istate)
+    """
+
+    enabled: bool = False
+    file: str = ""
+    cfg: str | None = None
+    update: str = "asynchronous"
+    updates_per_step: int = 100
+    time_units_per_h: float = 10.0
+    max_events_per_step: int = 20000
+    inputs: list = field(default_factory=list)
+    outputs: dict = field(default_factory=dict)
+    initial_states: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class OutputConfig:
     metrics_every_h: float = 1.0
     profile_every_h: float = 12.0
@@ -178,6 +229,7 @@ class ExperimentConfig:
     oxygen: OxygenConfig = field(default_factory=OxygenConfig)
     species: list = field(default_factory=list)  # list[SpeciesConfig], solved after oxygen in this order
     geometry: GeometryConfig = field(default_factory=GeometryConfig)
+    network: NetworkConfig = field(default_factory=NetworkConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
 
     # ---- model objects -------------------------------------------------------------------
@@ -202,6 +254,34 @@ class ExperimentConfig:
             glucose_death_threshold=lc.glucose_death_threshold_mM if self.has_glucose else 0.0,
             necrosis_requires_glucose=lc.necrosis_requires_glucose and self.has_glucose,
             placement_factor=lc.placement_factor,
+            phenotype_model=lc.phenotype_model,
+            apoptosis_rate=lc.apoptosis_rate_per_h,
+            necrosis_rate=lc.necrosis_rate_per_h,
+        )
+
+    def network_files(self, base_dir: str | Path | None = None) -> tuple[Path, Path | None]:
+        """Model and .cfg paths, relative paths resolved against ``base_dir`` (the config file's
+        directory) when the file exists there, else against the working directory."""
+        n = self.network
+        if not n.file:
+            raise ConfigError("network.file is required when the network is enabled")
+        return _resolve_path(n.file, base_dir), (_resolve_path(n.cfg, base_dir) if n.cfg else None)
+
+    def load_network(self, base_dir: str | Path | None = None) -> BooleanNetwork:
+        model, cfg = self.network_files(base_dir)
+        return load_network(model, cfg)
+
+    def network_params(self, base_dir: str | Path | None = None, network: BooleanNetwork | None = None) -> NetworkParams:
+        n = self.network
+        return NetworkParams(
+            network=network or self.load_network(base_dir),
+            update=n.update,
+            updates_per_step=n.updates_per_step,
+            time_units_per_h=n.time_units_per_h,
+            max_events_per_step=n.max_events_per_step,
+            inputs=tuple(InputClamp(node=i.node, source=i.source, threshold=i.threshold, above=i.above) for i in n.inputs),
+            outputs=dict(n.outputs) or None,
+            initial_states=dict(n.initial_states),
         )
 
     @property
@@ -248,8 +328,9 @@ class ExperimentConfig:
 
     # ---- validation -------------------------------------------------------------------------
 
-    def validate(self) -> list[str]:
-        """Raise ConfigError on inconsistencies; return a list of warnings."""
+    def validate(self, base_dir: str | Path | None = None) -> list[str]:
+        """Raise ConfigError on inconsistencies; return a list of warnings. ``base_dir`` resolves
+        relative file names (network models) as in :meth:`network_files`."""
         warnings: list[str] = []
         sim, cells = self.simulation, self.cells
         if sim.duration_h <= 0.0:
@@ -308,8 +389,32 @@ class ExperimentConfig:
             if g.seed_within_radius_um is not None and g.seed_within_radius_um <= 0.0:
                 raise ConfigError("geometry.seed_within_radius_um must be positive")
             self.contact_params().check_substep(stepping.dt_mechanics)  # includes wall_rate
+        n = self.network
+        if self.lifecycle.phenotype_model == "network" and not n.enabled:
+            raise ConfigError("lifecycle.phenotype_model = network needs network.enabled = true")
+        if n.enabled:
+            try:
+                params = self.network_params(base_dir)
+            except (OSError, ValueError) as exc:  # NetworkError, ExpressionError are ValueErrors
+                raise ConfigError(f"network: {exc}") from exc
+            available = ["constant"]
+            if self.oxygen.enabled:
+                names = [sp.name for sp in self.species]
+                available += ["oxygen"] + [n for n in names if n == "glucose"] + [n for n in names if n != "glucose"][:2]
+            for clamp in params.inputs:
+                if clamp.source not in available:
+                    raise ConfigError(f"network input {clamp.node!r}: source {clamp.source!r} is not one of {available}")
+            clamped = {c.node for c in params.inputs}
+            p_on = {**{node.name: node.p_on for node in params.network.nodes}, **n.initial_states}
+            frozen_random = [name for name in params.network.input_names if name not in clamped and 0.0 < p_on[name] < 1.0]
+            if frozen_random:
+                warnings.append(f"network input nodes without a clamp are drawn once and then frozen: {frozen_random}")
+            if self.lifecycle.phenotype_model == "rules":
+                warnings.append("the network runs and its fate counts are recorded, but lifecycle.phenotype_model = rules decides the phenotypes")
+            elif not any(params.outputs.values()):
+                raise ConfigError("lifecycle.phenotype_model = network needs at least one network output node")
         free_growth = cells.initial_count * np.exp(self.lifecycle.division_rate_per_h * sim.duration_h)
-        if free_growth > cells.max_cells:
+        if free_growth > cells.max_cells and self.lifecycle.phenotype_model == "rules":  # in network mode division needs Proliferation ON
             warnings.append(
                 f"free exponential growth would reach {free_growth:.0f} cells > max_cells={cells.max_cells}; "
                 "the run stops with status 'capacity_exceeded' if inhibition and death do not limit it"
@@ -321,6 +426,16 @@ class ExperimentConfig:
 
 
 # ---- loading ----------------------------------------------------------------------------------
+
+_LIST_ITEMS = {(ExperimentConfig, "species"): SpeciesConfig, (NetworkConfig, "inputs"): NetworkInputConfig}
+
+
+def _resolve_path(name: str | Path, base_dir: str | Path | None) -> Path:
+    path = Path(name).expanduser()
+    if path.is_absolute() or base_dir is None:
+        return path
+    candidate = Path(base_dir) / path
+    return candidate if candidate.exists() or not path.exists() else path
 
 
 def _build(cls, data, path: str):
@@ -336,10 +451,10 @@ def _build(cls, data, path: str):
         target = hints[name]
         if dataclasses.is_dataclass(target):
             kwargs[name] = _build(target, value, f"{path}.{name}")
-        elif name == "species" and cls is ExperimentConfig:
+        elif (cls, name) in _LIST_ITEMS:
             if not isinstance(value, list):
-                raise ConfigError(f"{path}.species must be a list")
-            kwargs[name] = [_build(SpeciesConfig, item, f"{path}.species[{i}]") for i, item in enumerate(value)]
+                raise ConfigError(f"{path}.{name} must be a list")
+            kwargs[name] = [_build(_LIST_ITEMS[(cls, name)], item, f"{path}.{name}[{i}]") for i, item in enumerate(value)]
         else:
             kwargs[name] = _coerce(target, value, f"{path}.{name}")
     try:
@@ -394,9 +509,22 @@ def apply_overrides(data: dict, overrides: list[str]) -> dict:
     return data
 
 
+def resolve_file_references(data: dict, base_dir: str | Path) -> dict:
+    """Make the file names a configuration refers to (network model and .cfg) absolute, relative
+    names being taken from ``base_dir`` (the YAML's directory) when they exist there."""
+    network = data.get("network")
+    if isinstance(network, dict):
+        for key in ("file", "cfg"):
+            if isinstance(network.get(key), str) and network[key]:
+                network[key] = str(_resolve_path(network[key], base_dir))
+    return data
+
+
 def load_config(path: str | Path, overrides: list[str] | None = None) -> ExperimentConfig:
-    with Path(path).open() as f:
+    path = Path(path)
+    with path.open() as f:
         data = yaml.safe_load(f) or {}
     if overrides:
         apply_overrides(data, overrides)
+    resolve_file_references(data, path.parent)
     return config_from_dict(data)

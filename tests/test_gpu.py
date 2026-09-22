@@ -6,6 +6,8 @@ implementation on the same inputs: bitwise where the algorithm is order-independ
 biology (threshold crossings can flip on round-off).
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -116,3 +118,42 @@ def test_experiment_runs_on_cuda(cuda, tmp_path):
     assert result.status == "completed"
     assert result.summary["cells"] >= 500
     assert (tmp_path / "run" / "metrics.csv").exists()
+
+
+def test_network_updates_match_cpu(cpu, cuda):
+    """Synchronous sweeps are deterministic (bitwise equal); asynchronous and MaBoSS updates
+    draw from the same per-cell streams, so they are bitwise equal too."""
+    from warpbiocell.network.model import load_network
+    from warpbiocell.network.runtime import InputClamp, NetworkParams, NetworkRuntime
+
+    networks = Path(__file__).resolve().parents[1] / "configs" / "networks"
+    net = load_network(networks / "microc_jaya.bnd", networks / "microc_jaya.cfg")
+    clamps = (InputClamp("Oxygen_supply", "oxygen", 15.7), InputClamp("Glucose_supply", "glucose", 4.0), InputClamp("EGFR_stimulus", "constant", 1.0))
+    n = 4000
+    for mode, kw in (("synchronous", {"updates_per_step": 5}), ("asynchronous", {"updates_per_step": 300}), ("maboss", {"time_units_per_h": 8.0})):
+        results = []
+        for device in (cpu, cuda):
+            pop = CellPopulation.from_numpy(_cluster(n), np.full(n, R), device=device, seed=13)
+            o = np.zeros(pop.capacity, dtype=np.float32)
+            o[: n // 2] = 30.0
+            pop.oxygen_local.assign(o)
+            pop.glucose_local.assign(np.full(pop.capacity, 5.0, dtype=np.float32))
+            rt = NetworkRuntime(NetworkParams(net, update=mode, inputs=clamps, **kw), pop.capacity, device=device, species_names=("oxygen", "glucose"))
+            rt.initialize(pop)
+            for _ in range(3):
+                rt.step(pop, dt_h=0.25)
+            results.append((rt.states_numpy(pop), pop.fate_flags_numpy()))
+        assert np.array_equal(results[0][0], results[1][0]), mode
+        assert np.array_equal(results[0][1], results[1][1]), mode
+
+
+def test_network_experiment_runs_on_cuda(cuda, tmp_path):
+    from warpbiocell.simulation.config import load_config
+
+    config = load_config(
+        Path(__file__).resolve().parents[1] / "configs" / "tumor_spheroid_network.yaml",
+        ["simulation.duration_h=2.0", "simulation.device=cuda:0", "cells.initial_count=500", "cells.max_cells=5000", "oxygen.grid.box_um=400.0", "output.figures=false"],
+    )
+    result = Experiment(config).run(tmp_path / "run")
+    assert result.status == "completed"
+    assert result.summary["network_proliferation_cells"] >= 0

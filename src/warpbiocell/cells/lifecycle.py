@@ -41,6 +41,12 @@ class LifecycleParams:
                                           multiple of the parent radius (1.0 = one radius apart,
                                           i.e. an initial overlap of one radius that the
                                           mechanics relaxes)
+    phenotype_model        rules | network  ``network``: the fate nodes of the per-cell Boolean
+                                          network decide (kernels/cell_kernels.py "Network
+                                          mode"); the oxygen/glucose division ramps are off
+    apoptosis_rate         [1/h]          network mode: death rate while Apoptosis is ON
+    necrosis_rate          [1/h]          network mode: death rate while Necrosis is ON (a
+                                          large value, e.g. 1e3, makes it immediate as in MicroC)
 
     With both thresholds at 0 the lifecycle is oxygen-independent (Milestone 3 behaviour).
     """
@@ -55,10 +61,17 @@ class LifecycleParams:
     glucose_death_threshold: float = 0.0
     necrosis_requires_glucose: bool = False
     placement_factor: float = 1.0
+    phenotype_model: str = "rules"
+    apoptosis_rate: float = 0.0
+    necrosis_rate: float = 0.0
 
     def __post_init__(self):
         if self.division_rate < 0.0 or self.death_rate < 0.0 or self.anoxic_death_rate < 0.0:
             raise ValueError("rates must be non-negative")
+        if self.apoptosis_rate < 0.0 or self.necrosis_rate < 0.0:
+            raise ValueError("apoptosis_rate and necrosis_rate must be non-negative")
+        if self.phenotype_model not in ("rules", "network"):
+            raise ValueError("phenotype_model must be 'rules' or 'network'")
         if self.inhibition_threshold < 1:
             raise ValueError("inhibition_threshold must be at least 1")
         if self.death_threshold < 0.0 or self.hypoxia_threshold < self.death_threshold:
@@ -67,6 +80,10 @@ class LifecycleParams:
             raise ValueError("need 0 <= glucose_death_threshold <= glucose_threshold")
         if self.placement_factor <= 0.0:
             raise ValueError("placement_factor must be positive")
+
+    @property
+    def uses_network(self) -> bool:
+        return self.phenotype_model == "network"
 
     @classmethod
     def oxygen_dependent(cls, **overrides) -> LifecycleParams:
@@ -105,11 +122,15 @@ def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: floa
             params.glucose_threshold,
             params.glucose_death_threshold,
             1 if params.necrosis_requires_glucose else 0,
+            1 if params.uses_network else 0,
+            params.apoptosis_rate,
+            params.necrosis_rate,
             population.cell_state,
             population.age,
             population.neighbor_count,
             population.oxygen_local,
             population.glucose_local,
+            population.fate_flags,
             population.rng_state,
         ],
         outputs=[population.divide_flag],
@@ -144,6 +165,7 @@ def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: floa
             population.rng_state,
             population.velocity,
             population.neighbor_count,
+            population.fate_flags,
         ],
         device=device,
     )

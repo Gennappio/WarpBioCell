@@ -25,6 +25,21 @@ and O = G = 0 (no field attached) the rules reduce to the oxygen-independent lif
 HYPOXIC cells may still divide at the reduced rate; crowded cells never divide, whatever
 their state.
 
+Network mode (``phenotype_model = PHENOTYPE_NETWORK``, Milestone 11): the fate nodes of the
+cell's Boolean network, packed in ``fate_flags`` (kernels/network_kernels.py), replace the
+environmental ramps, as in MicroC's fate cycle:
+
+    death rate          = max(baseline rate as above, necrosis_rate if Necrosis is ON,
+                                                      apoptosis_rate if Apoptosis is ON)
+    may divide          = Proliferation ON and Growth_Arrest OFF and not crowded
+    P(divide during dt) = 1 - exp(-division_rate * dt)      if it may divide
+    state               = HYPOXIC if O < hypoxia_threshold (an oxygen marker, as above)
+                        = PROLIFERATIVE if it may divide, else QUIESCENT
+
+The environmental death rule (death_threshold, necrosis_requires_glucose) still applies when
+its thresholds are set, so MicroC's environment-driven necrosis can be combined with the
+gene-gated one; with the thresholds at 0 only the network decides.
+
 Stated simplifications, to be revisited explicitly:
     * the cell cycle is memoryless: no refractory period after division, no minimum age;
     * a cell divides at most once per step and a daughter cannot divide in the step of its
@@ -44,6 +59,10 @@ depends only on the seed and the history of that cell, never on thread schedulin
 import warp as wp
 
 from warpbiocell.cells.model import NUM_STATES, STATE_DEAD, STATE_HYPOXIC, STATE_PROLIFERATIVE, STATE_QUIESCENT
+from warpbiocell.kernels.network_kernels import FATE_APOPTOSIS, FATE_GROWTH_ARREST, FATE_NECROSIS, FATE_PROLIFERATION
+
+PHENOTYPE_RULES = wp.constant(0)
+PHENOTYPE_NETWORK = wp.constant(1)
 
 
 @wp.func
@@ -67,11 +86,15 @@ def lifecycle_decide(
     glucose_threshold: wp.float32,
     glucose_death_threshold: wp.float32,
     necrosis_requires_glucose: wp.int32,
+    phenotype_model: wp.int32,
+    apoptosis_rate: wp.float32,
+    necrosis_rate: wp.float32,
     cell_state: wp.array(dtype=wp.int32),
     age: wp.array(dtype=wp.float32),
     neighbor_count: wp.array(dtype=wp.int32),
     oxygen_local: wp.array(dtype=wp.float32),
     glucose_local: wp.array(dtype=wp.float32),
+    fate_flags: wp.array(dtype=wp.int32),
     rng_state: wp.array(dtype=wp.uint32),
     divide_flag: wp.array(dtype=wp.int32),
 ):
@@ -85,6 +108,9 @@ def lifecycle_decide(
     rng = rng_state[i]
     o = oxygen_local[i]
     g = glucose_local[i]
+    flags = int(0)
+    if phenotype_model == PHENOTYPE_NETWORK:
+        flags = fate_flags[i]
 
     # Death is evaluated first: a cell that dies this step neither divides nor changes state
     # otherwise. The draw is always consumed so the stream advances identically whether or not
@@ -95,6 +121,10 @@ def lifecycle_decide(
     rate = death_rate
     if lethal:
         rate = wp.max(death_rate, anoxic_death_rate)
+    if (flags & FATE_NECROSIS) != 0:
+        rate = wp.max(rate, necrosis_rate)
+    if (flags & FATE_APOPTOSIS) != 0:
+        rate = wp.max(rate, apoptosis_rate)
     p_death = 1.0 - wp.exp(-rate * dt)
     if wp.randf(rng) < p_death:
         cell_state[i] = STATE_DEAD
@@ -102,15 +132,21 @@ def lifecycle_decide(
         return
 
     crowded = neighbor_count[i] >= inhibition_threshold
+    may_divide = not crowded
+    factor = float(1.0)
+    if phenotype_model == PHENOTYPE_NETWORK:
+        may_divide = may_divide and ((flags & FATE_PROLIFERATION) != 0) and ((flags & FATE_GROWTH_ARREST) == 0)
+    else:
+        factor = oxygen_factor(o, hypoxia_threshold, death_threshold) * oxygen_factor(g, glucose_threshold, glucose_death_threshold)
+
     if o < hypoxia_threshold:
         cell_state[i] = STATE_HYPOXIC
-    elif crowded:
-        cell_state[i] = STATE_QUIESCENT
-    else:
+    elif may_divide:
         cell_state[i] = STATE_PROLIFERATIVE
+    else:
+        cell_state[i] = STATE_QUIESCENT
 
-    if not crowded:
-        factor = oxygen_factor(o, hypoxia_threshold, death_threshold) * oxygen_factor(g, glucose_threshold, glucose_death_threshold)
+    if may_divide:
         p_divide = 1.0 - wp.exp(-division_rate * factor * dt)
         if wp.randf(rng) < p_divide:
             divide_flag[i] = 1
@@ -134,6 +170,7 @@ def place_daughters(
     rng_state: wp.array(dtype=wp.uint32),
     velocity: wp.array(dtype=wp.vec3),
     neighbor_count: wp.array(dtype=wp.int32),
+    fate_flags: wp.array(dtype=wp.int32),
 ):
     i = wp.tid()
     if divide_flag[i] == 0:
@@ -159,6 +196,7 @@ def place_daughters(
     glucose_local[j] = glucose_local[i]
     velocity[j] = wp.vec3(0.0, 0.0, 0.0)
     neighbor_count[j] = 0
+    fate_flags[j] = fate_flags[i]  # the daughter starts with the parent's network (words copied by network_inherit)
     # rng_state[j] was initialised for every slot at population creation and is left untouched.
 
 

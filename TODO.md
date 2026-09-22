@@ -35,6 +35,13 @@ Replace this file's content when the task is done.
   kernel, 3 workflows, README); all three workflows verified through the OpenCellComms
   engine on the CPU. WarpBioCell side: `Experiment.run(on_metrics=...)`,
   `docs/integrations/opencellcomms.md`.
+* 2026-09-22 — Milestone 11 (gene network per cell): `network/` (expression parser, MaBoSS
+  `.bnd/.cfg` and BoolNet `.bnet` readers, `NetworkRuntime`), `kernels/network_kernels.py`
+  (bit-packed states, postfix evaluator, asynchronous / synchronous / MaBoSS-Gillespie
+  updates, input clamps, fate flags, inheritance), lifecycle `phenotype_model: network`,
+  `network:` config section, fate metrics columns, checkpoints, 34 network tests + CUDA
+  comparison, `configs/networks/microc_jaya.{bnd,cfg}` (from OpenCellComms),
+  `configs/tumor_spheroid_network.yaml` + `docs/results/spheroid_network.md`.
 
 ## Decisions taken
 
@@ -42,8 +49,9 @@ Replace this file's content when the task is done.
   spheroid dataset (2026-09-22).
 * CUDA: tested at the end, on the user's GPU machine, by uploading the repository there
   (`README.md`, "On a CUDA machine"). No GPU numbers before that.
-* Gene regulatory network: last milestone (11), design notes in `docs/vision.md`; no network
-  hooks before then (2026-09-22).
+* Gene regulatory network: last milestone (11), design notes in `docs/vision.md`; done with
+  the MicroC network taken from the OpenCellComms `MicroC` adapter (MaBoSS files, unit
+  rates). MicroC's NetLogo graph-walk propagation is not reproduced (2026-09-22).
 * Patient geometry: synthetic shapes first, masks as a thin loader; the tissue boundary is
   rigid until the mechanobiology extension. A real NIfTI segmentation is not needed now.
 * Milestone 8 stops at the OpenUSD export; the Isaac demonstrator waits for a machine with
@@ -51,7 +59,8 @@ Replace this file's content when the task is done.
 * Milestone 9: glucose and lactate as species with per-state rates; MicroC's file value for
   glucose consumption (3e-15 mol/cell/s) is not used, the stoichiometric rates are
   (2026-09-22). The remaining Milestone 9 items (MCT1 / lactate uptake, pH, multiple cell
-  types) wait for the gene network (Milestone 11) — decided 2026-09-22.
+  types) waited for the gene network; now that it exists they are open work items, not
+  blocked (2026-09-22).
 * Milestone 10 is the OpenCellComms adapter; no LLM call inside WarpBioCell (2026-09-22).
 
 ## Open items that need a human decision
@@ -60,8 +69,11 @@ Replace this file's content when the task is done.
   curve, viable-rim thickness, necrosis onset diameter).
 * The `MicroC_warp` adapter is created but **not committed** in the OpenCellComms repository
   (that repository has unrelated uncommitted changes of yours); commit it there when ready.
-* The MicroC network exported from GINsim (MaBoSS `.bnd/.cfg` or BoolNet `.bnet`) for
-  Milestone 11.
+  It predates Milestone 11: a `define_warp_network` node (network file + inputs) would let
+  workflows drive the gene network.
+* In network mode the division rate is the rate *while Proliferation is ON* (~20 % of the
+  cells at stationarity with the MicroC network); `configs/tumor_spheroid_network.yaml` uses
+  0.1/h for an effective ~0.02/h — an illustrative choice to confirm or replace.
 
 ## Next
 
@@ -69,5 +81,7 @@ Replace this file's content when the task is done.
   tests, the three benchmarks at 10³–10⁶ cells, commit `benchmarks/results/*_cuda0.json`,
   then profile the contact kernel and the SOR sweeps and decide whether anything merits an
   upstream Warp issue (docs/upstream.md).
-* Milestone 11 — gene regulatory network per cell (docs/vision.md design notes), once the
-  network file is available.
+* Network follow-ups: MCT1 lactate uptake and pH as species the network can read
+  (`MCT1_stimulus` already reads lactate); `define_warp_network` in the OpenCellComms
+  adapter; a comparison of the `maboss` mode against the MaBoSS binary on the MicroC
+  network (the closed-form checks stand in for now).

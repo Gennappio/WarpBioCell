@@ -1,0 +1,613 @@
+// Converted from GraphML
+
+node EGFR_stimulus {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node FGFR_stimulus {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node TGFBR_stimulus {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node DNA_damage {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node Apoptosis {
+  logic = ! BCL2 & ! ERK & FOXO3 & p53;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node Growth_Arrest {
+  logic = p21;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node Proliferation {
+  logic = p70 & MYC & ! p21 & ! Growth_Inhibitor & ATP_Production_Rate;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node ERK {
+  logic = MEK1_2;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node p38 {
+  logic = (TAOK & MAP3K1_3) | (MAP3K1_3 & MTK1) | (TAOK & MTK1) | (TAK1 & MTK1) | (TAK1 & MAP3K1_3) | (TAK1 & TAOK) | ((TAOK | MTK1 | MAP3K1_3 | TAK1) & ! DUSP1);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node JNK {
+  logic = (TAOK & MAP3K1_3) | (MAP3K1_3 & MTK1) | (TAOK & MTK1) | (TAK1 & MTK1) | (TAK1 & MAP3K1_3) | (TAK1 & TAOK) | ((TAOK | MTK1 | MAP3K1_3 | TAK1) & ! DUSP1);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node p53 {
+  logic = (ATM & p38) | ((ATM | p38) & ! MDM2);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node p21 {
+  logic = ! AKT & p53;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node TGFBR {
+  logic = TGFBR_stimulus;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node EGFR {
+  logic = (EGFR_stimulus | SPRY) & ! (PKC | GRB2 | EGFRI_affinity);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node FGFR {
+  logic = FGFR_stimulus & ! (GRB2 | PKC | FGFRI);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node ATM {
+  logic = DNA_damage;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node TAOK {
+  logic = ATM;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MAX {
+  logic = p38;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node GRB2 {
+  logic = EGFR | FRS2 | TGFBR | cMET;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node FRS2 {
+  logic = FGFR & ! SPRY & ! GRB2;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PI3K {
+  logic = GAB1 | (RAS & SOS);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node AP1 {
+  logic = JUN & (FOS | ATF2);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PPP2CA {
+  logic = p38;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MEK1_2 {
+  logic = (RAF | MAP3K1_3) & ! (PPP2CA | AP1);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node DUSP1 {
+  logic = CREB;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MYC {
+  logic = (MSK & MAX) | (MSK & AKT);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node AKT {
+  logic = PDK1 & ! PTEN;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PLCG {
+  logic = EGFR | FGFR | cMET;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PKC {
+  logic = PLCG;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node GADD45 {
+  logic = SMAD | p53;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node ELK1 {
+  logic = ERK | JNK | p38;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node FOS {
+  logic = ERK & RSK & (ELK1 | CREB);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node ATF2 {
+  logic = JNK | p38;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node JUN {
+  logic = JNK;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MSK {
+  logic = ERK | p38;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node CREB {
+  logic = MSK;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node RSK {
+  logic = ERK;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node SMAD {
+  logic = TGFBR;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MTK1 {
+  logic = GADD45;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node SPRY {
+  logic = ERK;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node RAF {
+  logic = (RAS | PKC) & ! (ERK | AKT);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node GAB1 {
+  logic = GRB2 | PI3K;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PDK1 {
+  logic = PI3K | HIF1 | MYC;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node p70 {
+  logic = PDK1 & ERK;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node p14 {
+  logic = MYC;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node FOXO3 {
+  logic = JNK & ! AKT;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node RAS {
+  logic = SOS | PLCG;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node SOS {
+  logic = GRB2 & ! RSK;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MDM2 {
+  logic = (p53 | AKT) & ! p14;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node BCL2 {
+  logic = CREB & AKT;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node TAK1 {
+  logic = TGFBR;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MAP3K1_3 {
+  logic = RAS;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PTEN {
+  logic = p53;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node HIF1 {
+  logic = p70 & ERK & ! Oxygen_supply;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node LOX {
+  logic = HIF1;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node VEGF {
+  logic = HIF1;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node Oxygen_supply {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node Necrosis {
+  logic = ! Oxygen_supply & ! Cell_Glucose;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node FGF {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node TGFA {
+  logic = HIF1;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node EGFRI {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node EGFRD {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node FGFRI {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node FGFRD {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node Glucose {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node Glucose_supply {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node GLUT1 {
+  logic = (HIF1 | ! p53 | MYC) & ! GLUT1I;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node Growth_Inhibitor {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node GI {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node EGFRI_affinity {
+  logic = EGFRI;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node Cell_Glucose {
+  logic = GLUT1 & Glucose_supply;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node G6P {
+  logic = Cell_Glucose;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node F6P {
+  logic = G6P;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node F16BP {
+  logic = F6P;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node GA3P {
+  logic = F16BP;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node BPG {
+  logic = GA3P;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PG3 {
+  logic = BPG;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PG2 {
+  logic = PG3;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PEP {
+  logic = PG2;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node Pyruvate {
+  logic = PEP | (LDHB & Cell_Lactate);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node Cell_Lactate {
+  logic = (Pyruvate & LDHA) | (Pyruvate & ! p53) | MCT1;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node AcetylCoA {
+  logic = Pyruvate & PDH;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node TCA {
+  logic = AcetylCoA;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node ETC {
+  logic = TCA & Oxygen_supply;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node mitoATP {
+  logic = ETC;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node PDH {
+  logic = ! PDK1 | p53 | LDHB;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node LDHA {
+  logic = HIF1 & MYC;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node cMET {
+  logic = cMET_stimulus & ! (PKC | cMETI);
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node cMET_stimulus {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node cMETI {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node HGF {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node cMETD {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node glycoATP {
+  logic = PEP & ! LDHB;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node ATP_Production_Rate {
+  logic = mitoATP | glycoATP;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MCT4 {
+  logic = Cell_Lactate & ! MCT1 & ! MCT4I;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MCT1 {
+  logic = Oxygen_supply & MCT1_stimulus & ! MCT1I;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node LDHB {
+  logic = MCT1;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node Lactate {
+  logic = MCT4;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MCT1_stimulus {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node Proton {
+  logic = MCT4;
+  rate_up = @logic ? 1 : 0;
+  rate_down = @logic ? 0 : 1;
+}
+
+node MCT1I {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node MCT1D {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node GLUT1I {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node GLUT1D {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node MCT4I {
+  rate_up = 0;
+  rate_down = 0;
+}
+
+node MCT4D {
+  rate_up = 0;
+  rate_down = 0;
+}
+

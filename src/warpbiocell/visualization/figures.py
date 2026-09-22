@@ -22,7 +22,9 @@ STATE_COLORS = {
 
 def population_figure(result, path: Path) -> Path:
     t = result.metric("time_h") / 24.0
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
+    has_network = bool(result.metrics) and result.metrics[-1].get("network_proliferation_cells", "") != ""
+    fig, axes = plt.subplots(1, 3 if has_network else 2, figsize=(16 if has_network else 11, 4))
+    ax1, ax2 = axes[0], axes[1]
     ax1.plot(t, result.metric("living_cells"), "k-", label="living")
     for state in CellState:
         ax1.plot(t, result.metric(f"{state.name.lower()}_cells"), color=STATE_COLORS[state], label=state.name.lower())
@@ -39,6 +41,17 @@ def population_figure(result, path: Path) -> Path:
     ax2.set_ylabel("radius [um]")
     ax2.legend(frameon=False)
     ax2.set_title("characteristic radii")
+
+    if has_network:
+        ax3 = axes[2]
+        living = np.maximum(result.metric("living_cells"), 1.0)
+        for role, color in (("proliferation", STATE_COLORS[CellState.PROLIFERATIVE]), ("apoptosis", "tab:purple"), ("growth_arrest", STATE_COLORS[CellState.QUIESCENT]), ("necrosis", STATE_COLORS[CellState.DEAD])):
+            ax3.plot(t, result.metric(f"network_{role}_cells") / living, color=color, label=role)
+        ax3.set_xlabel("time [days]")
+        ax3.set_ylabel("fraction of living cells with the node ON")
+        ax3.set_ylim(0.0, 1.0)
+        ax3.legend(frameon=False)
+        ax3.set_title("gene network fate nodes")
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)

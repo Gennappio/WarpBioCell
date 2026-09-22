@@ -13,10 +13,10 @@ import numpy as np
 from warpbiocell.cells.state import CellPopulation
 from warpbiocell.fields.oxygen import OxygenField
 
-CELL_ARRAYS = ("position", "radius", "cell_state", "cell_type", "age", "oxygen_local", "glucose_local", "rng_state")
+CELL_ARRAYS = ("position", "radius", "cell_state", "cell_type", "age", "oxygen_local", "glucose_local", "fate_flags", "rng_state")
 
 
-def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: OxygenField | None, time_h: float, region=None) -> Path:
+def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: OxygenField | None, time_h: float, region=None, network=None) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     n = population.count
@@ -38,6 +38,9 @@ def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: Oxygen
         arrays["tissue_sdf"] = region.sdf_numpy()
         arrays["grid_origin"] = np.array(region.geometry.origin)
         arrays["grid_dx"] = np.array(region.geometry.dx)
+    if network is not None:  # a NetworkRuntime: packed node states (uint64 words) and the node order
+        arrays["network_states"] = network.states.numpy()[:n].copy()
+        arrays["network_nodes"] = np.array(network.network.names)
     np.savez_compressed(path, **arrays)
     return path
 

@@ -1,11 +1,14 @@
-"""One cell step = oxygen update, lifecycle decisions, mechanical relaxation.
+"""One cell step = field update, gene network, lifecycle decisions, mechanical relaxation.
 
 Operator splitting (AGENTS.md "Simulation cycle"):
 
-    1-5. oxygen.update       deposit living cells on the grid, solve the quasi-steady field
-                             from the previous solution (warm start), sample it at the cells
+    1-5. oxygen.update       deposit living cells on the grid, solve the quasi-steady fields
+                             from the previous solution (warm start), sample them at the cells
                              (one host sync per residual check)             [optional]
+    5b.  network.step        clamp the input nodes from the sampled fields, advance every
+                             cell's Boolean network, pack the fate nodes    [optional, no sync]
     6-7. lifecycle_step      states, deaths, divisions; daughters appended     (1 host sync)
+         network.inherit     daughters copy the parent's network state        [optional]
     8-9. relax_contacts      `mechanics_substeps` explicit substeps of dt_mechanics, each
                              rebuilding the hash grid; leaves neighbor_count for the next
                              lifecycle decision                                (no host sync)
@@ -60,13 +63,19 @@ def cell_step(
     stepping: TimeStepping,
     oxygen: OxygenField | None = None,
     region=None,
+    network=None,
 ) -> StepReport:
-    """Advance the population by ``stepping.dt_cells``. ``region`` (a TissueRegion) confines the cells."""
+    """Advance the population by ``stepping.dt_cells``. ``region`` (a TissueRegion) confines the
+    cells; ``network`` (a NetworkRuntime) runs one Boolean network per cell."""
+    report = StepReport(0)
     if oxygen is not None:
         field = oxygen.update(population)
-        n_daughters = lifecycle_step(population, lifecycle, stepping.dt_cells)
-        relax_contacts(population, grid, contact, stepping.dt_mechanics, stepping.mechanics_substeps, region)
-        return StepReport(n_daughters, field.sweeps, field.residual, field.converged)
+        report = StepReport(0, field.sweeps, field.residual, field.converged)
+    if network is not None:
+        network.step(population, stepping.dt_cells)
+    count_before = population.count
     n_daughters = lifecycle_step(population, lifecycle, stepping.dt_cells)
+    if network is not None and n_daughters:
+        network.inherit(population, count_before)
     relax_contacts(population, grid, contact, stepping.dt_mechanics, stepping.mechanics_substeps, region)
-    return StepReport(n_daughters)
+    return StepReport(n_daughters, report.field_sweeps, report.field_residual, report.field_converged)

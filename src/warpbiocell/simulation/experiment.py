@@ -28,6 +28,7 @@ from warpbiocell.geometry.shapes import Sphere
 from warpbiocell.io.checkpoints import save_checkpoint
 from warpbiocell.io.run_output import RunOutput
 from warpbiocell.metrics.population import population_summary, radial_profile, shell_radii
+from warpbiocell.network.runtime import NetworkRuntime
 from warpbiocell.simulation.config import ExperimentConfig
 from warpbiocell.simulation.simulator import cell_step
 
@@ -49,7 +50,8 @@ class Experiment:
     def __init__(self, config: ExperimentConfig, device: str | None = None, config_path: str | Path | None = None):
         self.config = config
         self.config_path = Path(config_path) if config_path else None
-        self.warnings = config.validate()
+        self.base_dir = self.config_path.parent if self.config_path else None
+        self.warnings = config.validate(self.base_dir)
         wp.config.quiet = True
         self.device = resolve_device(device or config.simulation.device)
 
@@ -74,6 +76,11 @@ class Experiment:
             else:
                 self.oxygen = OxygenField(config.grid_geometry(), config.oxygen_params(), config.solver_settings(), device=self.device, fixed_outside=fixed_outside)
         self.confine = self.region if (self.region is not None and config.geometry.confine) else None
+        self.network = None
+        if config.network.enabled:
+            species_names = ("oxygen", *(sp.name for sp in config.species)) if config.oxygen.enabled else ()
+            self.network = NetworkRuntime(config.network_params(self.base_dir), capacity=cells.max_cells, device=self.device, species_names=species_names)
+            self.network.initialize(self.population)
         self.time_h = 0.0
 
     # ---- construction ----------------------------------------------------------------------
@@ -148,6 +155,9 @@ class Experiment:
             "cells_outside_tissue": outside_tissue,
             "wall_s": wall_s,
         }
+        fates = self.network.fate_counts(self.population) if self.network is not None else {}
+        for role in ("proliferation", "apoptosis", "growth_arrest", "necrosis"):
+            row[f"network_{role}_cells"] = fates.get(role, "")
         return row, profile
 
     # ---- run ----------------------------------------------------------------------------------
@@ -178,6 +188,15 @@ class Experiment:
                     "confined": self.confine is not None,
                     "oxygen_source": cfg.geometry.oxygen_source,
                 }
+            if self.network is not None:
+                net = self.network.network
+                output.metadata["network"] = {
+                    "source": net.source,
+                    "nodes": net.n_nodes,
+                    "inputs": net.input_names,
+                    "update": cfg.network.update,
+                    "phenotype_model": cfg.lifecycle.phenotype_model,
+                }
             output.write_metadata()
         for message in self.warnings:
             if log:
@@ -187,6 +206,9 @@ class Experiment:
         contact_substep(self.population, self.grid, self.contact, dt=0.0)  # neighbour counts of the initial state
         if self.oxygen is not None:
             self.oxygen.update(self.population)
+        if self.network is not None:
+            self.network.clamp_inputs(self.population)  # the initial inputs reflect the initial fields
+            self.network.read_fates(self.population)
 
         def record(wall, sweeps, metrics=True, profile=True, checkpoint=True):
             row, prof = self.observe(wall, sweeps)
@@ -209,7 +231,7 @@ class Experiment:
                 if output:
                     output.write_profile(self.time_h, prof)
             if checkpoint and output:
-                save_checkpoint(output.checkpoint_path(self.time_h), self.population, self.oxygen, self.time_h, region=self.region)
+                save_checkpoint(output.checkpoint_path(self.time_h), self.population, self.oxygen, self.time_h, region=self.region, network=self.network)
             return row
 
         wall = 0.0
@@ -221,7 +243,7 @@ class Experiment:
         last_row = result.metrics[-1]
         for step in range(1, n_steps + 1):
             try:
-                report = cell_step(self.population, self.grid, self.lifecycle, self.contact, stepping, oxygen=self.oxygen, region=self.confine)
+                report = cell_step(self.population, self.grid, self.lifecycle, self.contact, stepping, oxygen=self.oxygen, region=self.confine, network=self.network)
             except CapacityError as exc:
                 status = "capacity_exceeded"
                 if log:

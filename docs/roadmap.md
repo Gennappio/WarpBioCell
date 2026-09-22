@@ -93,9 +93,9 @@ Candidates: glucose, lactate, pH, metabolic phenotypes, drug response, spatial o
 
 Expose the simulation as a scientific tool. Example: "Test how oxygen availability affects necrotic-core formation." The agent generates the parameter sweep, simulations, analysis, comparison and next experiment.
 
-### Milestone 11 — Gene regulatory network per cell (last, decided 2026-09-22)
+### Milestone 11 — Gene regulatory network per cell — done 2026-09-22
 
-A Boolean network inside every agent, MaBoSS-style, as an alternative phenotype model to the built-in rules. Design notes in [vision.md](vision.md) ("Gene network"). Needs the MicroC network exported from GINsim (MaBoSS `.bnd/.cfg` or BoolNet `.bnet`). This is what makes MicroC's gene-perturbation experiments reproducible on the GPU; it is deliberately scheduled after the imaging and visualization milestones.
+A Boolean network inside every agent, MaBoSS-style, as the alternative `network` phenotype model. Readers for MaBoSS `.bnd/.cfg` and BoolNet `.bnet`; postfix logic programs interpreted in Warp kernels over bit-packed states; asynchronous, synchronous and MaBoSS (Gillespie) updates; inputs clamped from oxygen, glucose, other species or constants; fate nodes drive division and death. The MicroC network (106 nodes) is in `configs/networks/`; `configs/tumor_spheroid_network.yaml` and [results/spheroid_network.md](results/spheroid_network.md) run it. Semantics and validation in [model.md](model.md) §4b. Not done: MicroC's NetLogo graph-walk mode (MicroC-specific), comparison against the MaBoSS binary (the closed-form checks stand in), lactate uptake and pH as fields.
 
 ## Experiment runner
 

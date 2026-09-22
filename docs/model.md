@@ -99,6 +99,57 @@ Validation: exact division counts, dead cells inert, contact inhibition, the dis
 branching law, death statistics, threshold behaviour with prescribed oxygen
 (`tests/test_lifecycle.py`, `tests/test_lifecycle_oxygen.py`).
 
+## 4b. Gene regulatory network per cell (`network/`, `kernels/network_kernels.py`)
+
+Every cell can carry a Boolean network (Milestone 11): `n` nodes packed as bits in
+`⌈n/64⌉` uint64 words per cell (up to 256 nodes), each node's logic compiled once into a
+postfix program that the kernels interpret with a stack of booleans held in one uint64
+register. Models are read from MaBoSS `.bnd` + `.cfg` (logic, `rate_up`/`rate_down` as
+`@logic ? a : b`, `$variables`, `.istate` initial probabilities) or BoolNet `.bnet`. A node
+without logic, or whose rates are identically zero, is an **input**: it is never updated by
+the dynamics but clamped from the environment every step.
+
+Update semantics, one of three per configuration, all drawing from the cell's own stream:
+
+```text
+asynchronous  updates_per_step times: pick a non-input node uniformly, set it to its logic
+              (= the MaBoSS chain with unit rates: one pick ≈ 1/m time units, m non-input nodes)
+synchronous   updates_per_step sweeps, every non-input node takes its logic of the old state
+maboss        Gillespie on the continuous-time Markov chain for dt · time_units_per_h units:
+              node OFF flips at rate_up(logic), node ON at rate_down(logic); τ ~ Exp(Σ rates)
+```
+
+Inputs: `Oxygen_supply = (O_i > 15.7 mmHg)`, `Glucose_supply = (G_i > 4 mM)`,
+`MCT1_stimulus = (L_i > 1.5 mM)` in the MicroC configuration (thresholds from MicroC's
+input parameters; `docs/reference/microc_parameters.md`), plus constant stimuli. Outputs:
+the fate nodes `Proliferation`, `Apoptosis`, `Growth_Arrest`, `Necrosis` are packed into
+`fate_flags`, which the lifecycle reads with `phenotype_model = network`:
+
+```text
+death rate    = max(environmental rate as in section 4, necrosis_rate if Necrosis,
+                                                       apoptosis_rate if Apoptosis)
+may divide    = Proliferation ∧ ¬Growth_Arrest ∧ ¬crowded
+P(divide)     = 1 − exp(−division_rate · dt)             if it may divide
+state         = HYPOXIC if O_i < hypoxia_threshold (a marker), PROLIFERATIVE if it may
+                divide, QUIESCENT otherwise
+```
+
+This is MicroC's fate cycle (Necrosis terminal at a large `necrosis_rate`; a moderate rate
+turns the Boolean node into an indicator with kinetics). The division rate is the rate
+*while Proliferation is ON*: with the MicroC network under normoxia and glucose the node is
+ON in ~20 % of the cells at stationarity — the network keeps cycling (p53, ERK) rather than
+settling on a fixed point — so the effective rate is `division_rate · P(Proliferation)`.
+Daughters copy the parent's network words and fate flags. Order within a step: fields →
+clamp inputs → network update → fates → lifecycle → inherit → mechanics.
+
+Validation (`tests/test_network.py`): the postfix evaluator against the numpy reference on
+random states of the 106-node MicroC network (bitwise); a single MaBoSS node against
+`P(ON, t) = 1 − e^{−rt}`; the asynchronous flip probability `1 − (1 − 1/m)^k`; a toy
+network's synchronous 4-cycle; MaBoSS and asynchronous stationary fate fractions agreeing on
+the MicroC network; clamping from fields and constants; inheritance; and the MicroC fates
+following the environment (no necrosis with oxygen and glucose, the Warburg switch under
+hypoxia keeping ATP and proliferation, necrosis without both).
+
 ## 5. Oxygen field (`kernels/field_kernels.py`, `fields/diffusion.py`)
 
 Reaction–diffusion with Michaelis–Menten uptake by living cells of number density `n(x)`
@@ -158,7 +209,10 @@ Lifecycle coupling with glucose `G`: `P(divide) ∝ oxygen_factor(O) · glucose_
 the same linear ramp (0 at `glucose_death_threshold`, 1 at `glucose_threshold`), and with
 `necrosis_requires_glucose` the anoxic death rate applies only when `O < death_threshold`
 and `G < glucose_death_threshold` (MicroC's necrosis rule). HYPOXIC cells are glycolytic:
-the phenotype is a rule until the gene network (Milestone 11).
+with `phenotype_model = rules` the phenotype is this rule; with `network` (section 4b) the
+network decides the fates and HYPOXIC stays an oxygen marker (at the `Oxygen_supply`
+threshold in `configs/tumor_spheroid_network.yaml`, so HYPOXIC = the cells whose network sees
+no oxygen supply, which are the glycolytic ones once it has relaxed).
 
 Validation: per-state densities against the reference deposit, the glucose → lactate chain
 against the exact discrete solution (dense solve with production and source), no lactate
@@ -214,13 +268,15 @@ Conversions: 7.13 mmHg per % O₂ (37 °C, 1 atm, humidified); α = 1.3 µM/mmHg
 ## 7. Randomness and reproducibility
 
 Every cell owns a counter-based stream `rand_init(seed, slot)` (`rng_state`), advanced only
-by its own draws; daughters use the stream of their slot. Daughter slots are assigned by a
-prefix sum. Same configuration + seed + device ⇒ bitwise identical results, independent of
+by its own draws — lifecycle, placement and network updates alike; daughters use the stream
+of their slot. Daughter slots are assigned by a prefix sum. Same configuration + seed + device ⇒ bitwise identical results, independent of
 `max_cells` (tested). CPU vs CUDA: float round-off in mechanics and field, statistical
 agreement in the biology.
 
 ## 8. What the model does not contain
 
-Lactate uptake (MCT1), ATP and pH; adhesion and motility; cell growth and volume changes;
-removal of dead cells; multiple cell types; gene networks (Milestone 11); vasculature;
-deformable tissue boundaries. Each is listed in docs/roadmap.md with its milestone.
+Lactate uptake (MCT1) and pH as fields (the network's `MCT1_stimulus` reads lactate, but no
+lactate is consumed); ATP as a quantity (the network has Boolean `glycoATP`/`mitoATP`);
+adhesion and motility; cell growth and volume changes; removal of dead cells; multiple cell
+types; drug nodes of the network (they exist as inputs and are simply OFF); vasculature;
+deformable tissue boundaries. Each is listed in docs/roadmap.md.
