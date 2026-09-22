@@ -23,11 +23,15 @@ masks = [
     "scipy>=1.11",      # Euclidean distance transform for segmentation masks (geometry/masks.py)
     "nibabel>=5",       # NIfTI label images
 ]
+usd = [
+    "usd-core>=24",     # OpenUSD export of checkpoints (io/export.py); post-processing only
+]
 dev = [
     "pytest>=8",
     "matplotlib>=3.8",
     "scipy>=1.11",
     "nibabel>=5",
+    "usd-core>=24",
 ]
 
 [tool.setuptools.packages.find]

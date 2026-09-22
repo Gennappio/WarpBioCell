@@ -191,7 +191,7 @@ class Experiment:
                 if output:
                     output.write_profile(self.time_h, prof)
             if checkpoint and output:
-                save_checkpoint(output.checkpoint_path(self.time_h), self.population, self.oxygen, self.time_h)
+                save_checkpoint(output.checkpoint_path(self.time_h), self.population, self.oxygen, self.time_h, region=self.region)
             return row
 
         wall = 0.0

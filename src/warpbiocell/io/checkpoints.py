@@ -16,7 +16,7 @@ from warpbiocell.fields.oxygen import OxygenField
 CELL_ARRAYS = ("position", "radius", "cell_state", "cell_type", "age", "oxygen_local", "rng_state")
 
 
-def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: OxygenField | None, time_h: float) -> Path:
+def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: OxygenField | None, time_h: float, region=None) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     n = population.count
@@ -30,6 +30,10 @@ def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: Oxygen
         arrays["density"] = oxygen.density.numpy()
         arrays["grid_origin"] = np.array(oxygen.geometry.origin)
         arrays["grid_dx"] = np.array(oxygen.geometry.dx)
+    if region is not None:
+        arrays["tissue_sdf"] = region.sdf_numpy()
+        arrays["grid_origin"] = np.array(region.geometry.origin)
+        arrays["grid_dx"] = np.array(region.geometry.dx)
     np.savez_compressed(path, **arrays)
     return path
 
