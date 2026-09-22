@@ -4,15 +4,22 @@ import pytest
 
 from warpbiocell.simulation.config import ConfigError, apply_overrides, config_from_dict, load_config
 
-REPO_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "tumor_spheroid.yaml"
+CONFIG_DIR = Path(__file__).resolve().parents[1] / "configs"
+REPO_CONFIG = CONFIG_DIR / "tumor_spheroid.yaml"
 
 
-def test_repository_config_loads_and_validates():
-    config = load_config(REPO_CONFIG)
-    assert config.name == "tumor_spheroid"
-    assert config.oxygen.diffusion_um2_per_h == 7.2e6
+@pytest.mark.parametrize("path", sorted(CONFIG_DIR.glob("*.yaml")), ids=lambda p: p.stem)
+def test_repository_configs_load_and_validate(path):
+    config = load_config(path)
+    assert config.name == path.stem
     assert config.validate() == []
     assert config.n_steps == int(config.simulation.duration_h / config.simulation.dt_cells_h)
+
+
+def test_baseline_config_values():
+    config = load_config(REPO_CONFIG)
+    assert config.oxygen.diffusion_um2_per_h == 7.2e6
+    assert load_config(CONFIG_DIR / "microc_oxygen.yaml").lifecycle.hypoxia_threshold_mmHg == 15.7
 
 
 def test_defaults_are_a_valid_experiment():
