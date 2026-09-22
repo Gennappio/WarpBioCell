@@ -47,6 +47,7 @@ METRIC_COLUMNS = [
     "oxygen_grid_min_mmHg",
     "field_sweeps",
     "cells_outside_grid",
+    "cells_outside_tissue",
     "wall_s",
 ]
 

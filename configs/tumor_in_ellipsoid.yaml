@@ -1,0 +1,68 @@
+# Milestone 7 demonstrator: a tumour filling an ellipsoidal tissue region (a stand-in for a
+# segmented lesion). Cells are seeded through the whole region, confined by its surface and
+# fed by oxygen held at boundary_mmHg on every grid node outside the tissue (a vessel-at-the-
+# surface first approximation). Same cell parameters and provenance as tumor_spheroid.yaml.
+# No clinical claim: the geometry is a shape, nothing more.
+
+name: tumor_in_ellipsoid
+
+simulation:
+  duration_h: 96             # 4 days
+  dt_cells_h: 0.25
+  dt_mechanics_h: 0.025
+  seed: 0
+  device: auto
+
+cells:
+  initial_count: 1000        # ignored: geometry.seed_fill fills the region (~7700 cells)
+  max_cells: 200000
+  radius_um: 8.0
+  initial_spacing_factor: 1.0
+  initial_jitter: 0.1
+
+mechanics:
+  stiffness: 10.0
+  damping: 1.0
+  margin_um: 2.0
+  wall_rate_per_h: 10.0      # tissue-surface contact rate, illustrative (same as k/gamma)
+
+lifecycle:
+  division_rate_per_h: 0.0289
+  death_rate_per_h: 0.0
+  anoxic_death_rate_per_h: 0.5
+  inhibition_threshold: 8
+  hypoxia_threshold_mmHg: 8.0
+  death_threshold_mmHg: 2.0
+  placement_factor: 1.0
+
+oxygen:
+  enabled: true
+  diffusion_um2_per_h: 7.2e+6
+  uptake_max_mmHg_um3_per_h: 1.4e+8
+  michaelis_k_mmHg: 3.4
+  boundary_mmHg: 38.0                  # held on every node outside the tissue
+  grid:
+    box_um: 800.0
+    dx_um: 20.0
+  solver:
+    omega: 1.8
+    tolerance: 1.0e-5
+    max_sweeps: 2000
+    check_every: 10
+
+geometry:
+  enabled: true
+  shape: ellipsoid
+  center_um: [0.0, 0.0, 0.0]
+  radii_um: [250.0, 200.0, 150.0]      # semi-axes, illustrative
+  confine: true
+  oxygen_source: tissue_surface
+  seed_fill: true
+  seed_margin_um: 0.0
+
+output:
+  metrics_every_h: 1.0
+  profile_every_h: 12.0
+  checkpoint_every_h: 24.0
+  shell_width_um: 20.0
+  figures: true

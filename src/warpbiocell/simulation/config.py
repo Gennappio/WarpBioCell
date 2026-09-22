@@ -51,6 +51,7 @@ class MechanicsConfig:
     stiffness: float = 10.0  # k [force/um]
     damping: float = 1.0  # gamma [force h/um]; only k/gamma [1/h] matters
     margin_um: float = 2.0  # neighbour query radius = 2 r + margin
+    wall_rate_per_h: float = 10.0  # confinement rate against a tissue surface (geometry.confine)
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,38 @@ class OxygenConfig:
 
 
 @dataclass(frozen=True)
+class GeometryConfig:
+    """Tissue region (Milestone 7). The SDF lives on the oxygen grid (``oxygen.grid``).
+
+    shape          sphere | ellipsoid | spheres | mask
+    center_um      centre of the sphere / ellipsoid
+    radii_um       sphere radius (first entry) or ellipsoid semi-axes
+    spheres        for ``spheres``: list of {center_um: [x, y, z], radius_um: r} (union)
+    mask_file      for ``mask``: NIfTI label image (needs the ``masks`` extra); voxel (0,0,0)
+                   of the mask sits at ``mask_origin_um``; ``mask_label`` selects one label
+    confine        push cells back inside the tissue (wall contact, mechanics.wall_rate_per_h)
+    oxygen_source  tissue_surface (every node outside the tissue holds boundary_mmHg) | box
+    seed_fill      fill the tissue with cells at initialisation (cells.initial_count ignored)
+    seed_margin_um extra distance from the surface kept free of cell centres at seeding
+    seed_within_radius_um   optional: seed only inside a sphere of this radius around center_um
+    """
+
+    enabled: bool = False
+    shape: str = "sphere"
+    center_um: list = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    radii_um: list = field(default_factory=lambda: [250.0, 200.0, 150.0])
+    spheres: list = field(default_factory=list)
+    mask_file: str | None = None
+    mask_label: int | None = None
+    mask_origin_um: list = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    confine: bool = True
+    oxygen_source: str = "tissue_surface"
+    seed_fill: bool = True
+    seed_margin_um: float = 0.0
+    seed_within_radius_um: float | None = None
+
+
+@dataclass(frozen=True)
 class OutputConfig:
     metrics_every_h: float = 1.0
     profile_every_h: float = 12.0
@@ -106,6 +139,7 @@ class ExperimentConfig:
     mechanics: MechanicsConfig = field(default_factory=MechanicsConfig)
     lifecycle: LifecycleConfig = field(default_factory=LifecycleConfig)
     oxygen: OxygenConfig = field(default_factory=OxygenConfig)
+    geometry: GeometryConfig = field(default_factory=GeometryConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
 
     # ---- model objects -------------------------------------------------------------------
@@ -115,7 +149,7 @@ class ExperimentConfig:
 
     def contact_params(self) -> ContactParams:
         m = self.mechanics
-        return ContactParams(stiffness=m.stiffness, damping=m.damping, max_radius=self.cells.radius_um, margin=m.margin_um)
+        return ContactParams(stiffness=m.stiffness, damping=m.damping, max_radius=self.cells.radius_um, margin=m.margin_um, wall_rate=m.wall_rate_per_h)
 
     def lifecycle_params(self) -> LifecycleParams:
         lc = self.lifecycle
@@ -144,6 +178,21 @@ class ExperimentConfig:
 
     def grid_geometry(self) -> GridGeometry:
         return GridGeometry.centered_cube(self.oxygen.grid.box_um, self.oxygen.grid.dx_um)
+
+    def tissue_shape(self):
+        """The synthetic shape described by ``geometry`` (None for masks or when disabled)."""
+        from warpbiocell.geometry.shapes import Ellipsoid, Sphere, Union
+
+        g = self.geometry
+        if not g.enabled or g.shape == "mask":
+            return None
+        if g.shape == "sphere":
+            return Sphere(center=tuple(g.center_um), radius=float(g.radii_um[0]))
+        if g.shape == "ellipsoid":
+            return Ellipsoid(center=tuple(g.center_um), radii=tuple(float(r) for r in g.radii_um))
+        if g.shape == "spheres":
+            return Union(tuple(Sphere(center=tuple(s["center_um"]), radius=float(s["radius_um"])) for s in g.spheres))
+        raise ConfigError(f"geometry.shape must be sphere, ellipsoid, spheres or mask, got {g.shape!r}")
 
     @property
     def n_steps(self) -> int:
@@ -180,6 +229,26 @@ class ExperimentConfig:
                 )
             if self.lifecycle.hypoxia_threshold_mmHg >= self.oxygen.boundary_mmHg:
                 warnings.append("hypoxia threshold is at or above the boundary oxygen: every cell will be hypoxic")
+        g = self.geometry
+        if g.enabled:
+            if g.oxygen_source not in ("tissue_surface", "box"):
+                raise ConfigError("geometry.oxygen_source must be tissue_surface or box")
+            if len(g.center_um) != 3 or len(g.mask_origin_um) != 3:
+                raise ConfigError("geometry.center_um and mask_origin_um need three components")
+            if g.shape == "mask":
+                if not g.mask_file:
+                    raise ConfigError("geometry.shape = mask needs geometry.mask_file")
+            else:
+                shape = self.tissue_shape()  # validates shape name and radii
+                if g.shape == "spheres" and not g.spheres:
+                    raise ConfigError("geometry.shape = spheres needs a non-empty geometry.spheres list")
+                geom = self.grid_geometry()
+                lo, hi = shape.bounds
+                if np.any(lo < np.asarray(geom.origin) + geom.dx) or np.any(hi > np.asarray(geom.upper) - geom.dx):
+                    raise ConfigError("the tissue shape does not fit in oxygen.grid with a one-voxel margin")
+            if g.seed_within_radius_um is not None and g.seed_within_radius_um <= 0.0:
+                raise ConfigError("geometry.seed_within_radius_um must be positive")
+            self.contact_params().check_substep(stepping.dt_mechanics)  # includes wall_rate
         free_growth = cells.initial_count * np.exp(self.lifecycle.division_rate_per_h * sim.duration_h)
         if free_growth > cells.max_cells:
             warnings.append(

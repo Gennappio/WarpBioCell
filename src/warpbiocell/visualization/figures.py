@@ -67,7 +67,7 @@ def radial_profile_figure(time_h: float, profile: dict, path: Path) -> Path:
     return path
 
 
-def oxygen_slice_figure(population, oxygen, time_h: float, path: Path) -> Path:
+def oxygen_slice_figure(population, oxygen, time_h: float, path: Path, region=None) -> Path:
     geom = oxygen.geometry
     field = oxygen.numpy()
     k = geom.shape[2] // 2
@@ -88,6 +88,9 @@ def oxygen_slice_figure(population, oxygen, time_h: float, path: Path) -> Path:
         vmax=max(float(field.max()), 1e-6),
     )
     fig.colorbar(im, ax=ax, label="oxygen [mmHg]")
+    if region is not None:
+        sdf = region.sdf_numpy()
+        ax.contour(x_axis, y_axis, sdf[:, :, k].T, levels=[0.0], colors="k", linewidths=1.0)
     for state in CellState:
         sel = in_slab & (states == int(state))
         if sel.any():
@@ -102,13 +105,42 @@ def oxygen_slice_figure(population, oxygen, time_h: float, path: Path) -> Path:
     return path
 
 
-def make_run_figures(directory: Path, result, population, oxygen) -> list[Path]:
+def cells_3d_figure(population, time_h: float, path: Path, region=None) -> Path:
+    """Cut-away 3-D view: cells with x > centroid are removed to expose the interior."""
+    pos = population.positions_numpy()
+    states = population.states_numpy()
+    centre = pos.mean(axis=0)
+    keep = pos[:, 0] <= centre[0]
+    fig = plt.figure(figsize=(6.5, 6))
+    ax = fig.add_subplot(111, projection="3d")
+    for state in CellState:
+        sel = keep & (states == int(state))
+        if sel.any():
+            ax.scatter(pos[sel, 0], pos[sel, 1], pos[sel, 2], s=4, color=STATE_COLORS[state], label=state.name.lower(), linewidths=0, depthshade=False)
+    span = max(np.ptp(pos, axis=0).max(), 1.0)
+    for axis, c in zip("xyz", centre):
+        getattr(ax, f"set_{axis}lim")(c - 0.55 * span, c + 0.55 * span)
+        getattr(ax, f"set_{axis}label")(f"{axis} [um]")
+    title = f"cells at t = {time_h / 24:.1f} days (cut-away)"
+    if region is not None:
+        title += f" in {region.name}"
+    ax.set_title(title)
+    ax.legend(frameon=False, loc="upper left", markerscale=3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    return path
+
+
+def make_run_figures(directory: Path, result, population, oxygen, region=None) -> list[Path]:
     figures = Path(directory) / "figures"
     figures.mkdir(exist_ok=True)
+    time_h = result.metrics[-1]["time_h"]
     made = [population_figure(result, figures / "population.png")]
     if result.profiles:
-        time_h, profile = result.profiles[-1]
-        made.append(radial_profile_figure(time_h, profile, figures / "radial_profile.png"))
+        profile_time, profile = result.profiles[-1]
+        made.append(radial_profile_figure(profile_time, profile, figures / "radial_profile.png"))
     if oxygen is not None:
-        made.append(oxygen_slice_figure(population, oxygen, result.metrics[-1]["time_h"], figures / "oxygen_slice.png"))
+        made.append(oxygen_slice_figure(population, oxygen, time_h, figures / "oxygen_slice.png", region))
+    made.append(cells_3d_figure(population, time_h, figures / "cells_3d.png", region))
     return made

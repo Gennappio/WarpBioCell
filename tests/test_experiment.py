@@ -72,7 +72,7 @@ def test_run_writes_the_full_directory_layout(tmp_path):
     assert "git_commit" in meta and "warp_version" in meta
 
     figures = sorted(p.name for p in (run_dir / "figures").iterdir())
-    assert figures == ["oxygen_slice.png", "population.png", "radial_profile.png"]
+    assert figures == ["cells_3d.png", "oxygen_slice.png", "population.png", "radial_profile.png"]
 
 
 def test_in_memory_runs_are_reproducible_and_seed_dependent():
