@@ -59,13 +59,14 @@ def cell_step(
     contact: ContactParams,
     stepping: TimeStepping,
     oxygen: OxygenField | None = None,
+    region=None,
 ) -> StepReport:
-    """Advance the population by ``stepping.dt_cells``."""
+    """Advance the population by ``stepping.dt_cells``. ``region`` (a TissueRegion) confines the cells."""
     if oxygen is not None:
         field = oxygen.update(population)
         n_daughters = lifecycle_step(population, lifecycle, stepping.dt_cells)
-        relax_contacts(population, grid, contact, stepping.dt_mechanics, stepping.mechanics_substeps)
+        relax_contacts(population, grid, contact, stepping.dt_mechanics, stepping.mechanics_substeps, region)
         return StepReport(n_daughters, field.sweeps, field.residual, field.converged)
     n_daughters = lifecycle_step(population, lifecycle, stepping.dt_cells)
-    relax_contacts(population, grid, contact, stepping.dt_mechanics, stepping.mechanics_substeps)
+    relax_contacts(population, grid, contact, stepping.dt_mechanics, stepping.mechanics_substeps, region)
     return StepReport(n_daughters)

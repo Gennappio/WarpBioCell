@@ -89,7 +89,7 @@ def solve_steady_state(
                 wp.launch(
                     sor_sweep,
                     dim=geom.shape,
-                    inputs=[color, settings.omega, dx2_over_D, kinetics.uptake_max, kinetics.michaelis_k, bc_x, bc_y, bc_z, density, field.values],
+                    inputs=[color, settings.omega, dx2_over_D, kinetics.uptake_max, kinetics.michaelis_k, bc_x, bc_y, bc_z, field.fixed, density, field.values],
                     device=dev,
                 )
             sweeps += 1
@@ -97,7 +97,7 @@ def solve_steady_state(
         wp.launch(
             steady_state_residual,
             dim=geom.shape,
-            inputs=[dx2_over_D, kinetics.uptake_max, kinetics.michaelis_k, 1.0 / reference, bc_x, bc_y, bc_z, density, field.values, residual_buffer],
+            inputs=[dx2_over_D, kinetics.uptake_max, kinetics.michaelis_k, 1.0 / reference, bc_x, bc_y, bc_z, field.fixed, density, field.values, residual_buffer],
             device=dev,
         )
         residual = float(residual_buffer.numpy()[0])
@@ -127,7 +127,7 @@ def explicit_step(
     wp.launch(
         ftcs_step,
         dim=geom.shape,
-        inputs=[dt, kinetics.diffusion / geom.dx**2, kinetics.uptake_max, kinetics.michaelis_k, bc_x, bc_y, bc_z, density, field.values, scratch],
+        inputs=[dt, kinetics.diffusion / geom.dx**2, kinetics.uptake_max, kinetics.michaelis_k, bc_x, bc_y, bc_z, field.fixed, density, field.values, scratch],
         device=field.device,
     )
     wp.copy(field.values, scratch)

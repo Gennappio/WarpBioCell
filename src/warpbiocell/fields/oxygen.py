@@ -68,11 +68,18 @@ class OxygenField:
         settings: SolverSettings = SolverSettings(),
         boundary: tuple[Boundary, Boundary, Boundary] = (Boundary.DIRICHLET,) * 3,
         device: wp.context.Device | str | None = None,
+        fixed_outside=None,
     ):
+        """``fixed_outside`` (a TissueRegion on the same grid) pins every node outside the tissue
+        to ``boundary_value``: the tissue surface becomes the oxygen source."""
         self.params = params
         self.settings = settings
         self.field = ScalarField.create(geometry, params.boundary_value, boundary=boundary, device=device)
         self.device = self.field.device
+        if fixed_outside is not None:
+            if tuple(fixed_outside.geometry.shape) != tuple(geometry.shape):
+                raise ValueError("the tissue region must be defined on the oxygen grid")
+            self.field.set_fixed(~fixed_outside.inside_mask())
         self.density = wp.zeros(geometry.shape, dtype=wp.float32, device=self.device)  # cells / um^3
         self._accumulator = wp.zeros(geometry.shape, dtype=wp.int64, device=self.device)
         self._scratch = wp.zeros(geometry.shape, dtype=wp.float32, device=self.device)

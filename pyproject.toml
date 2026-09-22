@@ -19,9 +19,15 @@ dependencies = [
 plots = [
     "matplotlib>=3.8",  # run figures; the runner skips them when it is not installed
 ]
+masks = [
+    "scipy>=1.11",      # Euclidean distance transform for segmentation masks (geometry/masks.py)
+    "nibabel>=5",       # NIfTI label images
+]
 dev = [
     "pytest>=8",
     "matplotlib>=3.8",
+    "scipy>=1.11",
+    "nibabel>=5",
 ]
 
 [tool.setuptools.packages.find]

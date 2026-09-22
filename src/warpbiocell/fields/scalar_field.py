@@ -3,7 +3,8 @@
 Node ``(i, j, k)`` sits at ``origin + dx * (i, j, k)`` and represents the voxel of volume
 ``dx**3`` around it. On a DIRICHLET axis the two face planes hold ``boundary_value`` and are
 never updated by solvers; on a NEUMANN axis the faces are zero-flux (mirror) planes, so a
-symmetric problem can be solved on a fraction of the domain.
+symmetric problem can be solved on a fraction of the domain. Any further set of nodes can be
+pinned to ``boundary_value`` with ``set_fixed`` (used to put the boundary on a tissue surface).
 """
 
 from __future__ import annotations
@@ -70,6 +71,7 @@ class ScalarField:
     boundary_value: float
     device: wp.context.Device
     values: wp.array  # array3d float32
+    fixed: wp.array  # array3d int32, 1 where the node is pinned to boundary_value
 
     @classmethod
     def create(
@@ -83,9 +85,24 @@ class ScalarField:
         device = wp.get_device(device)
         fill = boundary_value if initial_value is None else initial_value
         values = wp.full(geometry.shape, float(fill), dtype=wp.float32, device=device)
-        field = cls(geometry=geometry, boundary=tuple(Boundary(b) for b in boundary), boundary_value=float(boundary_value), device=device, values=values)
+        fixed = wp.zeros(geometry.shape, dtype=wp.int32, device=device)
+        field = cls(geometry=geometry, boundary=tuple(Boundary(b) for b in boundary), boundary_value=float(boundary_value), device=device, values=values, fixed=fixed)
         field.apply_dirichlet()
         return field
+
+    def set_fixed(self, mask: np.ndarray | None) -> None:
+        """Pin the nodes where ``mask`` is true to ``boundary_value`` (``None`` clears the mask)."""
+        if mask is None:
+            self.fixed.zero_()
+            return
+        mask = np.asarray(mask, dtype=bool)
+        if mask.shape != tuple(self.geometry.shape):
+            raise ValueError(f"mask shape {mask.shape} does not match the grid {self.geometry.shape}")
+        self.fixed.assign(mask.astype(np.int32))
+        self.apply_dirichlet()
+
+    def fixed_mask(self) -> np.ndarray:
+        return self.fixed.numpy().astype(bool)
 
     @property
     def boundary_flags(self) -> tuple[int, int, int]:
@@ -103,21 +120,16 @@ class ScalarField:
         self.apply_dirichlet()
 
     def apply_dirichlet(self) -> None:
-        """Re-impose ``boundary_value`` on every Dirichlet face (host round trip; not per step)."""
-        if all(b == Boundary.NEUMANN for b in self.boundary):
+        """Re-impose ``boundary_value`` on every Dirichlet face and pinned node (host round trip; not per step)."""
+        pinned = ~self.interior_mask()
+        if not pinned.any():
             return
         a = self.values.numpy()
-        for axis, b in enumerate(self.boundary):
-            if b == Boundary.DIRICHLET:
-                idx = [slice(None)] * 3
-                idx[axis] = 0
-                a[tuple(idx)] = self.boundary_value
-                idx[axis] = -1
-                a[tuple(idx)] = self.boundary_value
+        a[pinned] = self.boundary_value
         self.values.assign(a)
 
     def interior_mask(self) -> np.ndarray:
-        """Mask of nodes that solvers update (everything except Dirichlet faces)."""
+        """Mask of nodes that solvers update (everything except Dirichlet faces and pinned nodes)."""
         mask = np.ones(self.geometry.shape, dtype=bool)
         for axis, b in enumerate(self.boundary):
             if b == Boundary.DIRICHLET:
@@ -126,4 +138,5 @@ class ScalarField:
                 mask[tuple(idx)] = False
                 idx[axis] = -1
                 mask[tuple(idx)] = False
+        mask &= ~self.fixed.numpy().astype(bool)
         return mask

@@ -63,8 +63,8 @@ def _mirror(idx, n):
     return idx
 
 
-def _fixed_mask(shape, boundary):
-    mask = np.zeros(shape, dtype=bool)
+def _fixed_mask(shape, boundary, extra=None):
+    mask = np.zeros(shape, dtype=bool) if extra is None else np.asarray(extra, dtype=bool).copy()
     for axis, b in enumerate(boundary):
         if Boundary(b) == Boundary.DIRICHLET:
             idx = [slice(None)] * 3
@@ -94,9 +94,9 @@ def neighbor_sum_reference(values):
     return s
 
 
-def ftcs_step_reference(values, density, diffusion, uptake_max, michaelis_k, dx, dt, boundary):
+def ftcs_step_reference(values, density, diffusion, uptake_max, michaelis_k, dx, dt, boundary, fixed_extra=None):
     v = np.asarray(values, dtype=np.float64)
-    fixed = _fixed_mask(v.shape, boundary)
+    fixed = _fixed_mask(v.shape, boundary, fixed_extra)
     lap = diffusion / dx**2 * (neighbor_sum_reference(v) - 6.0 * v)
     uptake = np.asarray(density, dtype=np.float64) * uptake_max * v / (michaelis_k + v)
     out = v + dt * (lap - uptake)
@@ -104,12 +104,12 @@ def ftcs_step_reference(values, density, diffusion, uptake_max, michaelis_k, dx,
     return out
 
 
-def steady_state_reference(values0, density, diffusion, uptake_max, michaelis_k, dx, boundary, picard_iterations=30, picard_tol=1e-12):
+def steady_state_reference(values0, density, diffusion, uptake_max, michaelis_k, dx, boundary, picard_iterations=30, picard_tol=1e-12, fixed_extra=None):
     """Exact solution of the discrete steady-state problem (dense solve + Picard on the uptake)."""
     v = np.asarray(values0, dtype=np.float64).copy()
     density = np.asarray(density, dtype=np.float64)
     shape = v.shape
-    fixed = _fixed_mask(shape, boundary)
+    fixed = _fixed_mask(shape, boundary, fixed_extra)
     unknown = np.argwhere(~fixed)
     index = -np.ones(shape, dtype=int)
     for row, (i, j, k) in enumerate(unknown):

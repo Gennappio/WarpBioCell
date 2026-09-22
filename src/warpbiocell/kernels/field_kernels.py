@@ -5,7 +5,9 @@ Equation (AGENTS.md, "Oxygen field"), with ``n`` the number density of consuming
     dO/dt = D lap(O) - n(x) * q(O),      q(O) = q_max * O / (K + O)      (Michaelis-Menten)
 
 Discretisation: 7-point Laplacian on cubic voxels of edge ``dx``. Dirichlet faces are never
-written; Neumann faces use mirrored neighbours (``f[-1] = f[1]``). Helper ``neighbor_sum``
+written, and neither are nodes flagged in the ``fixed`` mask (e.g. every node outside a
+tissue region, which then holds the boundary value: a vessel at the tissue surface);
+Neumann faces use mirrored neighbours (``f[-1] = f[1]``). Helper ``neighbor_sum``
 always mirrors at the edges, which is only ever reached on Neumann faces because Dirichlet
 face nodes return early.
 
@@ -158,13 +160,14 @@ def sor_sweep(
     bc_x: int,
     bc_y: int,
     bc_z: int,
+    fixed: wp.array3d(dtype=wp.int32),  # 1 where the node holds a prescribed value
     density: wp.array3d(dtype=wp.float32),  # cells / um^3
     field: wp.array3d(dtype=wp.float32),
 ):
     i, j, k = wp.tid()
     if ((i + j + k) & 1) != color:
         return
-    if is_fixed(i, j, k, field.shape[0], field.shape[1], field.shape[2], bc_x, bc_y, bc_z):
+    if fixed[i, j, k] != 0 or is_fixed(i, j, k, field.shape[0], field.shape[1], field.shape[2], bc_x, bc_y, bc_z):
         return
     o = field[i, j, k]
     c = density[i, j, k] * uptake_max / (michaelis_k + o)
@@ -181,13 +184,14 @@ def steady_state_residual(
     bc_x: int,
     bc_y: int,
     bc_z: int,
+    fixed: wp.array3d(dtype=wp.int32),
     density: wp.array3d(dtype=wp.float32),
     field: wp.array3d(dtype=wp.float32),
     residual: wp.array(dtype=wp.float32),  # one element; max-norm
 ):
     """Dimensionless residual |sum_nb O - (6 + dx^2 c / D) O| / O_ref over updated nodes."""
     i, j, k = wp.tid()
-    if is_fixed(i, j, k, field.shape[0], field.shape[1], field.shape[2], bc_x, bc_y, bc_z):
+    if fixed[i, j, k] != 0 or is_fixed(i, j, k, field.shape[0], field.shape[1], field.shape[2], bc_x, bc_y, bc_z):
         return
     o = field[i, j, k]
     c = density[i, j, k] * uptake_max / (michaelis_k + o)
@@ -204,6 +208,7 @@ def ftcs_step(
     bc_x: int,
     bc_y: int,
     bc_z: int,
+    fixed: wp.array3d(dtype=wp.int32),
     density: wp.array3d(dtype=wp.float32),
     field_in: wp.array3d(dtype=wp.float32),
     field_out: wp.array3d(dtype=wp.float32),
@@ -211,7 +216,7 @@ def ftcs_step(
     """Explicit Euler / central differences reference step (stable for dt <= dx^2 / (6 D))."""
     i, j, k = wp.tid()
     o = field_in[i, j, k]
-    if is_fixed(i, j, k, field_in.shape[0], field_in.shape[1], field_in.shape[2], bc_x, bc_y, bc_z):
+    if fixed[i, j, k] != 0 or is_fixed(i, j, k, field_in.shape[0], field_in.shape[1], field_in.shape[2], bc_x, bc_y, bc_z):
         field_out[i, j, k] = o
         return
     lap = D_over_dx2 * (neighbor_sum(field_in, i, j, k) - 6.0 * o)
