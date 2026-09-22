@@ -13,7 +13,7 @@ import numpy as np
 from warpbiocell.cells.state import CellPopulation
 from warpbiocell.fields.oxygen import OxygenField
 
-CELL_ARRAYS = ("position", "radius", "cell_state", "cell_type", "age", "oxygen_local", "rng_state")
+CELL_ARRAYS = ("position", "radius", "cell_state", "cell_type", "age", "oxygen_local", "glucose_local", "rng_state")
 
 
 def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: OxygenField | None, time_h: float, region=None) -> Path:
@@ -25,9 +25,13 @@ def save_checkpoint(path: str | Path, population: CellPopulation, oxygen: Oxygen
     arrays["capacity"] = np.array(population.capacity)
     arrays["seed"] = np.array(population.seed)
     arrays["time_h"] = np.array(time_h)
+    for name, values in population.extra_local.items():
+        arrays[f"{name}_local"] = values.numpy()[:n].copy()
     if oxygen is not None:
-        arrays["field"] = oxygen.numpy()
-        arrays["density"] = oxygen.density.numpy()
+        fields = getattr(oxygen, "species_fields", None) or {"oxygen": oxygen}
+        for name, species in fields.items():
+            arrays["field" if name == "oxygen" else f"field_{name}"] = species.numpy()
+        arrays["density"] = fields["oxygen"].density.numpy()
         arrays["grid_origin"] = np.array(oxygen.geometry.origin)
         arrays["grid_dx"] = np.array(oxygen.geometry.dx)
     if region is not None:

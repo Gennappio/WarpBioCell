@@ -21,6 +21,7 @@ from warpbiocell.cells.mechanics import ContactParams
 from warpbiocell.fields.diffusion import SolverSettings
 from warpbiocell.fields.oxygen import OxygenParams
 from warpbiocell.fields.scalar_field import GridGeometry
+from warpbiocell.fields.species import SpeciesParams, by_state
 from warpbiocell.simulation.simulator import TimeStepping
 
 
@@ -62,6 +63,9 @@ class LifecycleConfig:
     inhibition_threshold: int = 8  # neighbours within the query radius
     hypoxia_threshold_mmHg: float = 8.0
     death_threshold_mmHg: float = 2.0
+    glucose_threshold_mM: float = 0.0  # division ramps down below it; 0 disables (needs a glucose species)
+    glucose_death_threshold_mM: float = 0.0  # with necrosis_requires_glucose: death needs O2 AND glucose below thresholds
+    necrosis_requires_glucose: bool = False  # MicroC's necrosis rule
     placement_factor: float = 1.0
 
 
@@ -86,8 +90,41 @@ class OxygenConfig:
     uptake_max_mmHg_um3_per_h: float = 1.4e8
     michaelis_k_mmHg: float = 3.4
     boundary_mmHg: float = 38.0
+    uptake_state_factors: dict = field(default_factory=dict)  # e.g. {hypoxic: 0.5}: multipliers per living state
     grid: GridConfig = field(default_factory=GridConfig)
     solver: SolverConfig = field(default_factory=SolverConfig)
+
+
+@dataclass(frozen=True)
+class SpeciesConfig:
+    """A metabolic species beyond oxygen (Milestone 9), solved on the oxygen grid.
+
+    uptake_max_by_state    [unit um^3/h per cell] Michaelis-Menten uptake per living state
+    production_by_state    [unit um^3/h per cell] zero-order production per state
+    production_source      name of an earlier species whose S/(K_S + S) scales the production
+                           (lactate from glucose); null for constant production
+    """
+
+    name: str = ""
+    unit: str = "mM"
+    diffusion_um2_per_h: float = 2.4e5
+    michaelis_k: float = 0.04
+    boundary_value: float = 5.0
+    uptake_max_by_state: dict = field(default_factory=dict)
+    production_by_state: dict = field(default_factory=dict)
+    production_source: str | None = None
+
+    def params(self) -> SpeciesParams:
+        return SpeciesParams(
+            name=self.name,
+            unit=self.unit,
+            diffusion=self.diffusion_um2_per_h,
+            michaelis_k=self.michaelis_k,
+            boundary_value=self.boundary_value,
+            uptake_max=by_state(self.uptake_max_by_state or None),
+            production=by_state(self.production_by_state or None),
+            production_source=self.production_source,
+        )
 
 
 @dataclass(frozen=True)
@@ -139,6 +176,7 @@ class ExperimentConfig:
     mechanics: MechanicsConfig = field(default_factory=MechanicsConfig)
     lifecycle: LifecycleConfig = field(default_factory=LifecycleConfig)
     oxygen: OxygenConfig = field(default_factory=OxygenConfig)
+    species: list = field(default_factory=list)  # list[SpeciesConfig], solved after oxygen in this order
     geometry: GeometryConfig = field(default_factory=GeometryConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
 
@@ -160,8 +198,18 @@ class ExperimentConfig:
             inhibition_threshold=lc.inhibition_threshold,
             hypoxia_threshold=lc.hypoxia_threshold_mmHg if self.oxygen.enabled else 0.0,
             death_threshold=lc.death_threshold_mmHg if self.oxygen.enabled else 0.0,
+            glucose_threshold=lc.glucose_threshold_mM if self.has_glucose else 0.0,
+            glucose_death_threshold=lc.glucose_death_threshold_mM if self.has_glucose else 0.0,
+            necrosis_requires_glucose=lc.necrosis_requires_glucose and self.has_glucose,
             placement_factor=lc.placement_factor,
         )
+
+    @property
+    def has_glucose(self) -> bool:
+        return self.oxygen.enabled and any(sp.name == "glucose" for sp in self.species)
+
+    def species_params(self) -> list[SpeciesParams]:
+        return [sp.params() for sp in self.species]
 
     def oxygen_params(self) -> OxygenParams:
         o = self.oxygen
@@ -219,6 +267,17 @@ class ExperimentConfig:
         if self.oxygen.enabled:
             self.oxygen_params()
             self.solver_settings()
+            by_state(self.oxygen.uptake_state_factors or None, default=1.0)
+            names = ["oxygen"]
+            for sp in self.species:
+                if not sp.name or sp.name in names:
+                    raise ConfigError(f"species need unique, non-empty names other than 'oxygen' (got {sp.name!r})")
+                if sp.production_source is not None and sp.production_source not in names:
+                    raise ConfigError(f"species {sp.name!r}: production_source must be an earlier species")
+                sp.params()  # validates rates and state names
+                names.append(sp.name)
+            if self.lifecycle.necrosis_requires_glucose and not self.has_glucose:
+                warnings.append("lifecycle.necrosis_requires_glucose is set but there is no species named 'glucose': oxygen-only death applies")
             geom = self.grid_geometry()
             # Initial cluster must fit with at least one voxel of margin on every side.
             cluster_radius = cells.radius_um * cells.initial_spacing_factor * (cells.initial_count / 0.52) ** (1.0 / 3.0)
@@ -277,6 +336,10 @@ def _build(cls, data, path: str):
         target = hints[name]
         if dataclasses.is_dataclass(target):
             kwargs[name] = _build(target, value, f"{path}.{name}")
+        elif name == "species" and cls is ExperimentConfig:
+            if not isinstance(value, list):
+                raise ConfigError(f"{path}.species must be a list")
+            kwargs[name] = [_build(SpeciesConfig, item, f"{path}.species[{i}]") for i, item in enumerate(value)]
         else:
             kwargs[name] = _coerce(target, value, f"{path}.{name}")
     try:

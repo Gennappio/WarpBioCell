@@ -1,0 +1,85 @@
+# Baseline spheroid plus glucose and lactate (Milestone 9). Rates follow MicroC's stoichiometry
+# (Jayathilake et al. 2024, Eqs 2-8; docs/reference/microc_parameters.md) applied to this
+# model's oxygen uptake q_O2 = 1.4e8 mmHg um^3/h per cell (~5e-17 mol/cell/s):
+#   OXPHOS cells      glucose = q_O2 / 6                      -> 3.0e4 mM um^3/h
+#   glycolytic cells  glucose = q_O2 / 6 * A0 / 2, A0 = 30    -> 4.5e5 mM um^3/h
+#                     lactate = 2 x glycolytic glucose        -> 9.0e5 mM um^3/h (x G/(K_G+G))
+#                     oxygen  = 0.5 x q_O2 (MicroC K = 0.5)
+# HYPOXIC cells are the glycolytic ones: the rule-based stand-in for MicroC's metabolic network
+# (Milestone 11 replaces it). Conversion: 1 mM = 1e-18 mol/um^3; mol/cell/s x 3600 / 1e-18.
+
+name: tumor_spheroid_metabolic
+
+simulation:
+  duration_h: 168
+  dt_cells_h: 0.25
+  dt_mechanics_h: 0.025
+  seed: 0
+  device: auto
+
+cells:
+  initial_count: 1000
+  max_cells: 200000
+  radius_um: 8.0
+  initial_spacing_factor: 1.0
+  initial_jitter: 0.1
+
+mechanics:
+  stiffness: 10.0
+  damping: 1.0
+  margin_um: 2.0
+
+lifecycle:
+  division_rate_per_h: 0.0289
+  death_rate_per_h: 0.0
+  anoxic_death_rate_per_h: 0.5
+  inhibition_threshold: 8
+  hypoxia_threshold_mmHg: 8.0
+  death_threshold_mmHg: 2.0
+  glucose_threshold_mM: 4.0          # MicroC Glucose_supply activation threshold; literature-derived
+  glucose_death_threshold_mM: 0.5    # MicroC's critical glucose for necrosis is not in the files; illustrative
+  necrosis_requires_glucose: true    # MicroC rule: necrosis needs oxygen AND glucose below threshold
+  placement_factor: 1.0
+
+oxygen:
+  enabled: true
+  diffusion_um2_per_h: 7.2e+6
+  uptake_max_mmHg_um3_per_h: 1.4e+8
+  michaelis_k_mmHg: 3.4
+  boundary_mmHg: 38.0
+  uptake_state_factors:
+    hypoxic: 0.5                     # MicroC K * glycoATP; literature-derived
+  grid:
+    box_um: 800.0
+    dx_um: 20.0
+  solver:
+    omega: 1.8
+    tolerance: 1.0e-5
+    max_sweeps: 2000
+    check_every: 10
+
+species:
+  - name: glucose
+    unit: mM
+    diffusion_um2_per_h: 2.4e+5      # MicroC 6.7e-11 m^2/s; literature-derived
+    michaelis_k: 0.04                # MicroC K_G baseline (S11 Fig); estimated
+    boundary_value: 5.0              # MicroC; literature-derived
+    uptake_max_by_state:
+      proliferative: 3.0e+4          # q_O2 / 6; estimated (stoichiometry)
+      quiescent: 3.0e+4
+      hypoxic: 4.5e+5                # glycolysis, A0/2 = 15 x; estimated (stoichiometry)
+  - name: lactate
+    unit: mM
+    diffusion_um2_per_h: 2.4e+5
+    michaelis_k: 1.0                 # unused: no lactate uptake in this rule set (no MCT1 yet)
+    boundary_value: 1.0              # MicroC boundary; literature-derived
+    production_by_state:
+      hypoxic: 9.0e+5                # 2 lactate per glucose; estimated (stoichiometry)
+    production_source: glucose       # scaled by G/(K_G + G): no glucose, no lactate
+
+output:
+  metrics_every_h: 1.0
+  profile_every_h: 12.0
+  checkpoint_every_h: 24.0
+  shell_width_um: 20.0
+  figures: true

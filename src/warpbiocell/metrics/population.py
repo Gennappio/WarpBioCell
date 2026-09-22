@@ -7,7 +7,6 @@ import warp as wp
 
 from warpbiocell.cells.model import NUM_STATES, CellState
 from warpbiocell.cells.state import CellPopulation
-from warpbiocell.fields.oxygen import OxygenField
 from warpbiocell.kernels.cell_kernels import count_states
 
 
@@ -20,7 +19,7 @@ def state_counts(population: CellPopulation) -> dict[CellState, int]:
     return {state: int(values[state]) for state in CellState}
 
 
-def population_summary(population: CellPopulation, oxygen: OxygenField | None = None) -> dict[str, float]:
+def population_summary(population: CellPopulation, oxygen=None) -> dict[str, float]:
     """Counts plus geometric and oxygen summaries (AGENTS.md "Outputs"), all in one host copy each."""
     counts = state_counts(population)
     x = population.positions_numpy()
@@ -40,11 +39,13 @@ def population_summary(population: CellPopulation, oxygen: OxygenField | None = 
     }
     if oxygen is not None:
         summary.update(oxygen_summary(population, oxygen))
+        summary.update(species_summary(population, oxygen))
     return summary
 
 
-def oxygen_summary(population: CellPopulation, oxygen: OxygenField) -> dict[str, float]:
-    """Oxygen at living cells and over the updated grid nodes [mmHg]."""
+def oxygen_summary(population: CellPopulation, oxygen) -> dict[str, float]:
+    """Oxygen at living cells and over the updated grid nodes [mmHg]; ``oxygen`` is an
+    OxygenField or a MetabolicFields (which exposes the oxygen field the same way)."""
     alive = population.states_numpy() != int(CellState.DEAD)
     at_cells = population.oxygen_numpy()[alive]
     grid = oxygen.numpy()[oxygen.field.interior_mask()]
@@ -55,6 +56,21 @@ def oxygen_summary(population: CellPopulation, oxygen: OxygenField) -> dict[str,
         "oxygen_grid_min": float(grid.min()),
         "field_sweeps": oxygen.last_report.sweeps if oxygen.last_report else 0,
     }
+
+
+def species_summary(population: CellPopulation, fields) -> dict[str, float]:
+    """Mean/min/max at living cells of every species beyond oxygen (empty for a plain OxygenField)."""
+    names = [n for n in getattr(fields, "names", []) if n != "oxygen"]
+    if not names:
+        return {}
+    alive = population.states_numpy() != int(CellState.DEAD)
+    out = {}
+    for name in names:
+        values = population.local_numpy(name)[alive]
+        out[f"{name}_cells_mean"] = float(values.mean()) if values.size else float("nan")
+        out[f"{name}_cells_min"] = float(values.min()) if values.size else float("nan")
+        out[f"{name}_cells_max"] = float(values.max()) if values.size else float("nan")
+    return out
 
 
 def radial_profile(
@@ -79,6 +95,10 @@ def radial_profile(
     which = np.minimum(np.digitize(r, edges) - 1, n_bins - 1)
     out = {"r_outer": edges[1:], "cells": np.bincount(which, minlength=n_bins)}
     out["oxygen_mean"] = np.array([o[which == b].mean() if np.any(which == b) else np.nan for b in range(n_bins)])
+    for name in ("glucose", "lactate"):
+        if name == "glucose" or name in population.extra_local:
+            v = population.local_numpy(name)
+            out[f"{name}_mean"] = np.array([v[which == b].mean() if np.any(which == b) else np.nan for b in range(n_bins)])
     for state in CellState:
         out[f"fraction_{state.name.lower()}"] = np.array(
             [np.mean(s[which == b] == int(state)) if np.any(which == b) else np.nan for b in range(n_bins)]

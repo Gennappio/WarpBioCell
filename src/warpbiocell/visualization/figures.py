@@ -132,6 +132,27 @@ def cells_3d_figure(population, time_h: float, path: Path, region=None) -> Path:
     return path
 
 
+def species_slices_figure(fields, time_h: float, path: Path) -> Path:
+    """Mid-plane slices of every species beyond oxygen."""
+    names = [n for n in fields.names if n != "oxygen"]
+    fig, axes = plt.subplots(1, len(names), figsize=(5.5 * len(names), 4.8), squeeze=False)
+    for ax, name in zip(axes[0], names):
+        species = fields[name]
+        geom = species.geometry
+        values = species.numpy()
+        k = geom.shape[2] // 2
+        x_axis, y_axis, _ = geom.node_coordinates()
+        im = ax.imshow(values[:, :, k].T, origin="lower", extent=(x_axis[0], x_axis[-1], y_axis[0], y_axis[-1]), cmap="viridis")
+        fig.colorbar(im, ax=ax, label=f"{name} [{species.species.unit}]")
+        ax.set_xlabel("x [um]")
+        ax.set_ylabel("y [um]")
+        ax.set_title(f"{name} at t = {time_h / 24:.1f} days")
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    return path
+
+
 def make_run_figures(directory: Path, result, population, oxygen, region=None) -> list[Path]:
     figures = Path(directory) / "figures"
     figures.mkdir(exist_ok=True)
@@ -142,5 +163,7 @@ def make_run_figures(directory: Path, result, population, oxygen, region=None) -
         made.append(radial_profile_figure(profile_time, profile, figures / "radial_profile.png"))
     if oxygen is not None:
         made.append(oxygen_slice_figure(population, oxygen, time_h, figures / "oxygen_slice.png", region))
+        if len(getattr(oxygen, "names", [])) > 1:
+            made.append(species_slices_figure(oxygen, time_h, figures / "species_slices.png"))
     made.append(cells_3d_figure(population, time_h, figures / "cells_3d.png", region))
     return made

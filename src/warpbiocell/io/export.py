@@ -99,6 +99,7 @@ def export_usd(run_dir: str | Path, out_path: str | Path | None = None, color_by
     color_pv = primvars.CreatePrimvar("displayColor", Sdf.ValueTypeNames.Color3fArray, UsdGeom.Tokens.vertex)
     state_pv = primvars.CreatePrimvar("state", Sdf.ValueTypeNames.IntArray, UsdGeom.Tokens.vertex)
     oxygen_pv = primvars.CreatePrimvar("oxygen", Sdf.ValueTypeNames.FloatArray, UsdGeom.Tokens.vertex)
+    extra_pvs = {}
 
     times = []
     domain_written = False
@@ -120,6 +121,12 @@ def export_usd(run_dir: str | Path, out_path: str | Path | None = None, color_by
         color_pv.Set(Vt.Vec3fArray.FromNumpy(_colors(state, oxygen, color_by, oxygen_max)), t)
         state_pv.Set(Vt.IntArray.FromNumpy(state), t)
         oxygen_pv.Set(Vt.FloatArray.FromNumpy(oxygen), t)
+        for key in data:
+            if key.endswith("_local") and key not in ("oxygen_local",):
+                name = key[: -len("_local")]
+                if name not in extra_pvs:
+                    extra_pvs[name] = primvars.CreatePrimvar(name, Sdf.ValueTypeNames.FloatArray, UsdGeom.Tokens.vertex)
+                extra_pvs[name].Set(Vt.FloatArray.FromNumpy(np.asarray(data[key], dtype=np.float32)[:n]), t)
         times.append(t)
 
         if not domain_written and "grid_origin" in data:

@@ -20,6 +20,7 @@ from warpbiocell.cells.lifecycle import CapacityError
 from warpbiocell.cells.mechanics import contact_substep, make_neighbor_grid
 from warpbiocell.cells.state import CellPopulation
 from warpbiocell.device import resolve_device, synchronize
+from warpbiocell.fields.metabolism import MetabolicFields
 from warpbiocell.fields.oxygen import OxygenField
 from warpbiocell.geometry.region import TissueRegion
 from warpbiocell.geometry.seeding import fill_region
@@ -63,11 +64,15 @@ class Experiment:
         self.lifecycle = config.lifecycle_params()
         self.stepping = config.stepping()
         fixed_outside = self.region if (self.region is not None and config.geometry.oxygen_source == "tissue_surface") else None
-        self.oxygen = (
-            OxygenField(config.grid_geometry(), config.oxygen_params(), config.solver_settings(), device=self.device, fixed_outside=fixed_outside)
-            if config.oxygen.enabled
-            else None
-        )
+        self.oxygen = None
+        if config.oxygen.enabled:
+            if config.species or config.oxygen.uptake_state_factors:
+                self.oxygen = MetabolicFields(
+                    config.grid_geometry(), config.oxygen_params(), config.species_params(), config.solver_settings(),
+                    device=self.device, fixed_outside=fixed_outside, oxygen_state_factors=config.oxygen.uptake_state_factors or None,
+                )
+            else:
+                self.oxygen = OxygenField(config.grid_geometry(), config.oxygen_params(), config.solver_settings(), device=self.device, fixed_outside=fixed_outside)
         self.confine = self.region if (self.region is not None and config.geometry.confine) else None
         self.time_h = 0.0
 
@@ -134,6 +139,10 @@ class Experiment:
             "oxygen_cells_min_mmHg": summary.get("oxygen_cells_min", float("nan")),
             "oxygen_grid_mean_mmHg": summary.get("oxygen_grid_mean", float("nan")),
             "oxygen_grid_min_mmHg": summary.get("oxygen_grid_min", float("nan")),
+            "glucose_cells_mean_mM": summary.get("glucose_cells_mean", float("nan")),
+            "glucose_cells_min_mM": summary.get("glucose_cells_min", float("nan")),
+            "lactate_cells_mean_mM": summary.get("lactate_cells_mean", float("nan")),
+            "lactate_cells_max_mM": summary.get("lactate_cells_max", float("nan")),
             "field_sweeps": field_sweeps,
             "cells_outside_grid": outside,
             "cells_outside_tissue": outside_tissue,
