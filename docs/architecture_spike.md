@@ -57,7 +57,11 @@ Reasons for this layout over alternatives:
 
 ## 3. Dynamic creation and removal of cells
 
-Chosen strategy: **prefix layout + deterministic append**.
+Chosen strategy: **prefix layout + deterministic append**. Implemented as planned in
+`cells/lifecycle.py` and `kernels/cell_kernels.py` (Milestone 3); measured cost on CPU at
+100k cells: decision kernel 0.55 ms, scan + host read 0.03 ms, placement with every cell
+dividing 3.1 ms — under 1% of a cell step with 10 mechanics substeps
+(`benchmarks/results/lifecycle_cpu.json`).
 
 1. A lifecycle kernel writes `divide_flag[i] ∈ {0,1}` for every active cell (per-cell RNG,
    see §6 of AGENTS.md on reproducibility).

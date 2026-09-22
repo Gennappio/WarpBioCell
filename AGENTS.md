@@ -70,7 +70,9 @@ uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[d
 .venv/bin/python -m pytest                             # CPU-safe suite; gpu-marked tests auto-skip
 .venv/bin/python -m pytest -m gpu                      # CUDA-only tests
 .venv/bin/python examples/spike_repulsion.py           # 10k cells + HashGrid + repulsion
-.venv/bin/python benchmarks/bench_mechanics.py         # per-kernel timings -> benchmarks/results/
+.venv/bin/python examples/growth_contact_inhibition.py # growth by division under contact inhibition
+.venv/bin/python benchmarks/bench_mechanics.py         # per-kernel mechanics timings -> benchmarks/results/
+.venv/bin/python benchmarks/bench_lifecycle.py         # lifecycle and full cell-step timings
 ```
 
 Not yet existing: `python -m warpbiocell.run --config configs/tumor_spheroid.yaml` (experiment runner, see docs/roadmap.md).
@@ -97,8 +99,8 @@ Priorities, in approximately this order: correctness, clarity, scientific interp
 
 ```text
 src/warpbiocell/
-    simulation/     simulator.py  state.py  config.py
-    cells/          model.py  lifecycle.py  mechanics.py
+    simulation/     simulator.py (cell_step, TimeStepping)  config.py (later)
+    cells/          state.py  model.py  initialization.py  lifecycle.py  mechanics.py
     spatial/        neighbors.py
     fields/         scalar_field.py  diffusion.py  oxygen.py
     kernels/        cell_kernels.py  field_kernels.py  mechanics_kernels.py
@@ -166,15 +168,24 @@ P(divide during dt) = 1 - exp(-lambda * dt)
 lambda = base_proliferation_rate * oxygen_factor
 ```
 
-The daughter is placed near the parent without extreme overlap. State is updated consistently.
+Implemented simplifications (kernels/cell_kernels.py), each to be revisited explicitly if changed:
+
+* a cell divides at most once per `dt_cells` and a daughter cannot divide in the step of its birth, so free growth per step is `(1 + p)` with `p = 1 - exp(-lambda dt)`, an effective rate below `lambda` by O(lambda dt) (0.5% at dt = 0.25 h, lambda = 0.0289/h);
+* the cell cycle is memoryless: no refractory period, no minimum age;
+* the daughter inherits the parent's radius (no volume conservation, no growth model); the pair is placed symmetrically about the parent's centre, `placement_factor * r` apart (default 1.0), and the resulting overlap is relaxed by the mechanics within the same step;
+* daughter slots are allocated by a prefix sum over dividing cells, so results never depend on thread scheduling or on `max_cells`.
 
 ### Contact inhibition
 
-An explicit, configurable local crowding criterion (neighbor count, or local packing/overlap) reduces or prevents division.
+An explicit, configurable local crowding criterion reduces or prevents division. Implemented as `neighbor_count >= inhibition_threshold`, where `neighbor_count` is the number of cells within the mechanics query radius (`2 r_max + margin`); crowded cells are `QUIESCENT`. The threshold is an illustrative parameter.
 
 ### Death
 
-Oxygen-dependent: below the severe-hypoxia threshold, death probability increases. Dead cells are not deleted immediately; they remain as physical entities. Removal, shrinkage and necrotic material are later work.
+Oxygen-dependent: below the severe-hypoxia threshold, death probability increases. Until the oxygen field exists, a constant oxygen-independent `death_rate` (`P = 1 - exp(-death_rate dt)`, default 0) is the placeholder. Dead cells are not deleted immediately; they remain as physical entities, never divide and stop ageing. Removal, shrinkage and necrotic material are later work.
+
+### Randomness
+
+Every cell owns a counter-based stream `rand_init(seed, slot)` kept in `rng_state` and advanced only by its own draws. A daughter uses the stream of the slot it is born into. No global random state anywhere.
 
 ### Oxygen field
 
@@ -250,9 +261,9 @@ oxygen:     { diffusion_coefficient: ..., boundary_concentration: ..., consumpti
 
 Every run records: configuration, random seed, simulation version, Warp version, device information, timestamp.
 
-* No global random state. Use per-cell counter-based RNG (`wp.rand_init(seed, ...)` keyed on cell id and step), so results do not depend on thread scheduling.
-* Daughter-slot allocation must be deterministic (for example prefix sum over dividing cells), not first-come-first-served between threads.
-* Target: same configuration + seed + device gives identical results. Across devices (CPU vs CUDA) expect **statistical** agreement only, and test it as such.
+* No global random state: per-cell persistent streams (see "Randomness" above), so results do not depend on thread scheduling.
+* Daughter-slot allocation is deterministic (prefix sum over dividing cells), not first-come-first-served between threads.
+* Same configuration + seed + device gives bitwise identical results, independent of `max_cells` (tested). Across devices (CPU vs CUDA) expect agreement to float round-off in the mechanics and **statistical** agreement of the biology only, and test it as such.
 
 ---
 

@@ -44,19 +44,19 @@ The necrotic core must emerge from the model. Do not hard-code it.
 
 ## Milestones
 
-### Milestone 0 — Repository foundation
+### Milestone 0 — Repository foundation (done 2026-09-22; CI still missing)
 
 Project skeleton, configuration, tests, benchmark infrastructure, CI. Decide the Python version and packaging. Update the Commands section of AGENTS.md.
 
-### Milestone 1 — GPU cellular particles
+### Milestone 1 — GPU cellular particles (done 2026-09-22; visualization pending)
 
 Cell arrays, cell initialization, Warp kernels, cell movement, basic visualization. Target: 10k+ cells.
 
-### Milestone 2 — Spatial interaction
+### Milestone 2 — Spatial interaction (done 2026-09-22, CPU-validated)
 
 HashGrid, neighbor search, contact detection, repulsive mechanics. Validate against controlled configurations.
 
-### Milestone 3 — Cell lifecycle
+### Milestone 3 — Cell lifecycle (done 2026-09-22, CPU-validated)
 
 Division, death, contact inhibition, stochastic reproducibility (deterministic slot allocation, per-cell RNG).
 
