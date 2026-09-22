@@ -1,0 +1,9 @@
+# First sensitivity study (docs/roadmap.md): oxygen at the domain boundary.
+# Base: configs/tumor_spheroid.yaml. 12 days so that the highest boundary value also reaches
+# hypoxia; the 800 um box (vessel distance 400 um) is kept fixed across the sweep.
+name: oxygen_boundary
+seeds: [0, 1, 2]
+overrides:
+  simulation.duration_h: 288
+grid:
+  oxygen.boundary_mmHg: [20, 38, 60, 100, 150]

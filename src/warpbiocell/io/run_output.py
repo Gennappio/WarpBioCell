@@ -22,6 +22,7 @@ import subprocess
 from pathlib import Path
 
 import warp as wp
+import yaml
 
 import warpbiocell
 
@@ -89,6 +90,8 @@ class RunOutput:
         (self.directory / "checkpoint").mkdir(exist_ok=True)
         if config_path is not None:
             shutil.copyfile(config_path, self.directory / "config.yaml")
+        else:  # no source file (programmatic or sweep run): dump the resolved values instead
+            (self.directory / "config.yaml").write_text(yaml.safe_dump(config_dict, sort_keys=False))
         self.metadata = {
             "name": config_dict.get("name"),
             "status": "running",

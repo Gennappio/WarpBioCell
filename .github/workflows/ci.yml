@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Warp devices
+        run: python -c "import warp as wp; wp.init(); print([d.alias for d in wp.get_devices()])"
+      - name: Tests (CPU; gpu-marked tests skip)
+        run: python -m pytest -q
+      - name: Configs dry run
+        run: python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml --sweep configs/sweeps/oxygen_boundary.yaml --dry-run
