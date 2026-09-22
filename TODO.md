@@ -8,41 +8,45 @@ Replace this file's content when the task is done.
   HashGrid + overdamped repulsion, CPU benchmarks.
 * 2026-09-22 — Milestone 3, cell lifecycle: per-cell RNG streams, stochastic division with
   prefix-sum slot allocation, contact inhibition, `cell_step` operator splitting.
-* 2026-09-22 — Milestone 4, oxygen: regular 3-D grid with per-axis Dirichlet/Neumann
-  boundaries, deterministic fixed-point trilinear deposit, red-black SOR steady-state solver
-  with linearised Michaelis–Menten uptake, FTCS reference, trilinear sampling, hypoxia /
-  oxygen-dependent division / anoxic death in the lifecycle, oxygen metrics and radial
-  profile. 58 CPU tests (numerical, computational, biological kept separate),
-  `benchmarks/results/field_cpu.json`, `examples/spheroid_oxygen.py` shows growth → gradient
-  → hypoxia → necrotic core with a viable rim, all emergent.
+* 2026-09-22 — Milestone 4, oxygen: 3-D grid, deterministic deposit, red-black SOR steady
+  state with Michaelis–Menten uptake, FTCS reference, hypoxia / oxygen-dependent division /
+  anoxic death; numerical, computational and biological tests.
+* 2026-09-22 — Milestone 5, experiment runner: YAML config with unit-named keys and strict
+  schema (`simulation/config.py`), `Experiment(config).run(dir)`, `python -m warpbiocell.run`
+  with `--set` overrides, run directory (config, metadata, metrics.csv, profiles.csv,
+  checkpoints, figures), 73 CPU tests, CUDA-vs-CPU test set ready for the GPU machine.
+  First quantitative analysis in `docs/results/spheroid_baseline.md`: necrotic core with a
+  stable 125 µm viable rim at 38 mmHg; hypoxia onset at 580 µm diameter at 150 mmHg.
+
+## Decisions taken
+
+* Validation path: reproduce a MicroC oxygen-only configuration first, then a published
+  spheroid dataset (agreed 2026-09-22).
+* CUDA: tested at the end, on the user's GPU machine, by uploading the repository there
+  (`README.md`, "On a CUDA machine"). No GPU numbers before that.
 
 ## Open items that need a human decision
 
-* Which CUDA machine provides GPU numbers (AGENTS.md, Device policy). Nothing has run on
-  CUDA yet; `tests/test_gpu.py` covers mechanics only and should gain field and lifecycle
-  cases once a device exists.
-* Validation data for Milestone 5: which published spheroid dataset (growth curve, viable-rim
-  thickness, necrosis onset diameter, cell line, medium O2) the quantitative comparison
-  targets. Candidate: reproduce a MicroC oxygen-only configuration first.
+* MicroC's exact oxygen-only parameter set (Table C of their S1 Text is not in the repository):
+  needed for the like-for-like 2-D slab reproduction.
 
-## Next: Milestone 5 — tumor spheroid experiment
+## Next: Milestone 5.1 — first scientific experiment (oxygen-boundary sensitivity)
 
-The coupled model exists; this milestone makes it a reproducible experiment.
+docs/roadmap.md "First sensitivity study", runnable on the CPU in minutes:
 
-1. `simulation/config.py`: one YAML → dataclasses (simulation, cells, mechanics, lifecycle,
-   oxygen, grid, output). Units in every key name or comment. Validate: grid contains the
-   initial cluster with margin; `rate * dt_mechanics`; capacity vs expected growth.
-2. `python -m warpbiocell.run --config configs/tumor_spheroid.yaml` producing
-   `runs/<timestamp>/{config.yaml, metadata.json, metrics.csv, checkpoint/, figures/}`;
-   metadata = config, seed, package version + git commit, Warp version, device, timestamp.
-3. Metrics per step to CSV (AGENTS.md "Outputs" list) plus periodic radial profiles;
-   checkpoint = `.npz` of the population arrays and the field (restart not required yet).
-4. Figures (matplotlib, optional dependency): population curves, radial oxygen and state
-   profiles, a mid-plane oxygen slice with cell positions.
-5. First quantitative analysis on the default configuration: growth curve, viable-rim
-   thickness, hypoxic and necrotic fractions vs time; compare qualitatively with MicroC and
-   with the zero-order diffusion estimate of the critical radius.
-6. `python -m warpbiocell.sweep` can wait; but design the config so a sweep is a list of
-   overrides.
+1. `python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml --sweep configs/sweeps/oxygen_boundary.yaml`:
+   a sweep file is a list of override sets plus a seed list; every run is an ordinary run
+   directory under `runs/<sweep>/`, and `summary.csv` collects the final metrics per run.
+2. Study: `oxygen.boundary_mmHg` in {20, 38, 60, 100, 150} × 3 seeds, 7 days (at 150 mmHg
+   12 days). Measure final viable count, necrotic fraction, spheroid radius, hypoxia-onset
+   radius, radial oxygen gradient, plus the seed-to-seed spread the results doc flags as
+   unmeasured.
+3. `docs/results/oxygen_boundary_sweep.md` with a figure of onset radius vs boundary oxygen
+   against the zero-order estimate.
+4. `docs/model.md`: equations, operator splitting, every assumption and parameter provenance
+   in one place (the MVP-completion item "documentation explains equations and assumptions").
+5. GitHub Actions: `pytest` on CPU on every push (Milestone 0 leftover).
+6. MicroC 2-D slab configuration (`oxygen.grid` with Neumann faces in z and a one-cell-thick
+   layer) once the parameter set is available.
 
-Do not start patient geometry or USD export before the experiment runner exists.
+Then Milestone 7 (patient geometry) — Milestone 6 (performance) waits for the CUDA machine.

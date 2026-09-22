@@ -64,7 +64,7 @@ Division, death, contact inhibition, stochastic reproducibility (deterministic s
 
 3D field, diffusion solver, boundary conditions, cell consumption, cell sampling. Validate diffusion independently. Settle the quasi-steady-state solver choice.
 
-### Milestone 5 — Tumor spheroid
+### Milestone 5 — Tumor spheroid (done 2026-09-22, CPU; quantitative validation against data still open)
 
 Couple cells + mechanics + oxygen. Produce growth, oxygen gradient, hypoxia, necrosis. Analyze quantitatively against the chosen validation data.
 

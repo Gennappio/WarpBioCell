@@ -66,18 +66,21 @@ Warp has no CUDA backend on macOS. The development machine is a Mac, so local ru
 ### Commands
 
 ```bash
-uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[dev]"
+uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[dev]"  (dev includes matplotlib)
 .venv/bin/python -m pytest                             # CPU-safe suite; gpu-marked tests auto-skip
 .venv/bin/python -m pytest -m gpu                      # CUDA-only tests
+.venv/bin/python -m warpbiocell.run --config configs/tumor_spheroid.yaml            # experiment -> runs/<timestamp>_<name>/
+.venv/bin/python -m warpbiocell.run --config configs/tumor_spheroid.yaml \
+    --set oxygen.boundary_mmHg=150 --set simulation.duration_h=48 --device cpu     # overrides; a sweep is a list of these
 .venv/bin/python examples/spike_repulsion.py           # 10k cells + HashGrid + repulsion
 .venv/bin/python examples/growth_contact_inhibition.py # growth by division under contact inhibition
-.venv/bin/python examples/spheroid_oxygen.py           # coupled spheroid: growth + oxygen + hypoxia + necrosis
+.venv/bin/python examples/spheroid_oxygen.py           # coupled spheroid without the run-directory machinery
 .venv/bin/python benchmarks/bench_mechanics.py         # per-kernel mechanics timings -> benchmarks/results/
 .venv/bin/python benchmarks/bench_lifecycle.py         # lifecycle and full cell-step timings
 .venv/bin/python benchmarks/bench_field.py             # deposit / SOR sweep / sample / warm update timings
 ```
 
-Not yet existing: `python -m warpbiocell.run --config configs/tumor_spheroid.yaml` (experiment runner, see docs/roadmap.md).
+Run directory contents and metric definitions: `src/warpbiocell/io/run_output.py`. Programmatic use: `Experiment(load_config(path)).run(output_dir)` (`simulation/experiment.py`). Results of the baseline: `docs/results/spheroid_baseline.md`.
 
 ---
 
@@ -101,7 +104,10 @@ Priorities, in approximately this order: correctness, clarity, scientific interp
 
 ```text
 src/warpbiocell/
-    simulation/     simulator.py (cell_step, TimeStepping)  config.py (later)
+    simulation/     simulator.py (cell_step, TimeStepping)  config.py (YAML -> dataclasses)  experiment.py (Experiment, RunResult)
+    io/             run_output.py (run directory, CSV/JSON)  checkpoints.py (.npz)
+    visualization/  figures.py (matplotlib, optional)
+    run.py          python -m warpbiocell.run
     cells/          state.py  model.py  initialization.py  lifecycle.py  mechanics.py
     spatial/        neighbors.py
     fields/         scalar_field.py (grid, boundaries)  diffusion.py (SOR, FTCS)  oxygen.py (params, coupling)
@@ -250,23 +256,16 @@ Implemented splitting (simulation/simulator.py `cell_step`): 1–5 as `OxygenFie
 ## Configuration and units
 
 * Scientific parameters live in explicit configuration (YAML), never scattered through code.
-* One consistent convention: length in micrometers, time in hours or seconds (pick one), concentration in a documented unit.
-* Every parameter states its unit. Never mix unit systems implicitly.
+* Convention: length in micrometers, time in hours, oxygen in mmHg. Every key carries its unit in its name (`dt_cells_h`, `radius_um`, `boundary_mmHg`). Never mix unit systems implicitly.
+* The schema is `simulation/config.py` (sections `simulation`, `cells`, `mechanics`, `lifecycle`, `oxygen{grid, solver}`, `output`); unknown keys are errors. `configs/tumor_spheroid.yaml` is the baseline and carries a provenance comment per biological parameter.
+* Overrides `--set section.key=value` make a sweep a list of override sets; the runner copies the YAML verbatim into the run directory and stores the resolved values in `metadata.json`.
+* Write exponents with a sign in YAML (`7.2e+6`): PyYAML reads `7.2e6` as a string (the loader converts numeric strings, but do not rely on it).
 
-Example shape:
-
-```yaml
-simulation: { duration_hours: 240, dt_cell_hours: 0.25, device: cpu }
-cells:      { initial_count: 500, max_cells: 100000, radius_um: 8, proliferation_rate: ... }
-oxygen:     { diffusion_coefficient: ..., boundary_concentration: ..., consumption_rate: ...,
-              hypoxia_threshold: ..., death_threshold: ... }
-```
+Every run records configuration, seed, package version and git commit, Warp version, device, timestamps and status (`io/run_output.py`).
 
 ---
 
 ## Reproducibility
-
-Every run records: configuration, random seed, simulation version, Warp version, device information, timestamp.
 
 * No global random state: per-cell persistent streams (see "Randomness" above), so results do not depend on thread scheduling.
 * Daughter-slot allocation is deterministic (prefix sum over dividing cells), not first-come-first-served between threads.
