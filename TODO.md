@@ -7,45 +7,42 @@ Replace this file's content when the task is done.
 * 2026-09-22 — architecture spike (Milestones 0–2): `docs/architecture_spike.md`, cells +
   HashGrid + overdamped repulsion, CPU benchmarks.
 * 2026-09-22 — Milestone 3, cell lifecycle: per-cell RNG streams, stochastic division with
-  prefix-sum slot allocation, placeholder death rate, contact inhibition from neighbour
-  counts, `cell_step` operator splitting, population metrics, 31 CPU tests,
-  `benchmarks/results/lifecycle_cpu.json`, `examples/growth_contact_inhibition.py`.
+  prefix-sum slot allocation, contact inhibition, `cell_step` operator splitting.
+* 2026-09-22 — Milestone 4, oxygen: regular 3-D grid with per-axis Dirichlet/Neumann
+  boundaries, deterministic fixed-point trilinear deposit, red-black SOR steady-state solver
+  with linearised Michaelis–Menten uptake, FTCS reference, trilinear sampling, hypoxia /
+  oxygen-dependent division / anoxic death in the lifecycle, oxygen metrics and radial
+  profile. 58 CPU tests (numerical, computational, biological kept separate),
+  `benchmarks/results/field_cpu.json`, `examples/spheroid_oxygen.py` shows growth → gradient
+  → hypoxia → necrotic core with a viable rim, all emergent.
 
 ## Open items that need a human decision
 
-* Which CUDA machine provides GPU numbers (AGENTS.md, Device policy). `tests/test_gpu.py`
-  and both benchmarks accept `--device cuda:0` but have never run on CUDA.
-* Oxygen unit convention for Milestone 4: mmHg (PhysiCell convention) or % O2 (MicroC
-  convention, 3–9% at the boundary). Default proposal: mmHg, with the % conversion written
-  next to the parameters.
+* Which CUDA machine provides GPU numbers (AGENTS.md, Device policy). Nothing has run on
+  CUDA yet; `tests/test_gpu.py` covers mechanics only and should gain field and lifecycle
+  cases once a device exists.
+* Validation data for Milestone 5: which published spheroid dataset (growth curve, viable-rim
+  thickness, necrosis onset diameter, cell line, medium O2) the quantitative comparison
+  targets. Candidate: reproduce a MicroC oxygen-only configuration first.
 
-## Next: Milestone 4 — oxygen
+## Next: Milestone 5 — tumor spheroid experiment
 
-Following `docs/architecture_spike.md` §4, option B first (iterative steady state), with the
-explicit scheme kept as the numerical reference:
+The coupled model exists; this milestone makes it a reproducible experiment.
 
-1. `fields/scalar_field.py`: regular 3-D grid (origin, spacing `dx`, shape), float32 values,
-   Dirichlet boundary value; trilinear sampling and deposit helpers in
-   `kernels/field_kernels.py`.
-2. Cell → grid coupling: deposit per-cell uptake capacity to the 8 surrounding nodes
-   (`wp.atomic_add`; float sum order is not deterministic — document, and keep the
-   residual tolerance well above round-off).
-3. Steady-state solver: Jacobi (or red-black Gauss–Seidel) sweeps of
-   `D ∇²O = rho * u_max * O / (K + O)` with the uptake linearised at the previous iterate
-   (`O_new = sum_nb O / (6 + dx² c / D)`, `c = rho u_max / (K + O_old)`), which keeps O ≥ 0.
-   Fixed iteration budget plus a residual check every k sweeps (one sync).
-4. Explicit FTCS time stepping as reference only, with the `dt <= dx²/(6D)` guard.
-5. Gather: sample O at cell positions into `oxygen_local`.
-6. Lifecycle coupling: `HYPOXIC` if `oxygen_local < hypoxia_threshold` (precedence above
-   contact inhibition); `lambda = base_rate * oxygen_factor(O)` with a documented, simple
-   form (e.g. clamp((O - O_death)/(O_hyp - O_death), 0, 1)); death rate increases below
-   `death_threshold`. Every parameter labelled illustrative/estimated/literature-derived.
-7. Tests (numerical / computational / biological kept separate): uniform field stays
-   uniform; Gaussian pulse vs analytical solution (explicit reference); symmetry
-   preservation; zero consumption converges to the boundary value; 1-D linear-uptake steady
-   state vs the cosh profile; trilinear sampling exact for linear fields; Warp vs numpy
-   reference on a tiny grid; spheroid run develops a radial oxygen gradient with hypoxic
-   core (biological, qualitative).
-8. Bench: steady-state solve at 50³, 100³, 200³ nodes; deposit + sample at 10k–100k cells.
+1. `simulation/config.py`: one YAML → dataclasses (simulation, cells, mechanics, lifecycle,
+   oxygen, grid, output). Units in every key name or comment. Validate: grid contains the
+   initial cluster with margin; `rate * dt_mechanics`; capacity vs expected growth.
+2. `python -m warpbiocell.run --config configs/tumor_spheroid.yaml` producing
+   `runs/<timestamp>/{config.yaml, metadata.json, metrics.csv, checkpoint/, figures/}`;
+   metadata = config, seed, package version + git commit, Warp version, device, timestamp.
+3. Metrics per step to CSV (AGENTS.md "Outputs" list) plus periodic radial profiles;
+   checkpoint = `.npz` of the population arrays and the field (restart not required yet).
+4. Figures (matplotlib, optional dependency): population curves, radial oxygen and state
+   profiles, a mid-plane oxygen slice with cell positions.
+5. First quantitative analysis on the default configuration: growth curve, viable-rim
+   thickness, hypoxic and necrotic fractions vs time; compare qualitatively with MicroC and
+   with the zero-order diffusion estimate of the critical radius.
+6. `python -m warpbiocell.sweep` can wait; but design the config so a sweep is a list of
+   overrides.
 
-Do not start the tumor spheroid experiment runner (Milestone 5) before the field tests pass.
+Do not start patient geometry or USD export before the experiment runner exists.

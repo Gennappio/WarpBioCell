@@ -24,13 +24,19 @@ pytest                                         # CPU-safe suite
 pytest -m gpu                                  # CUDA-only tests (skipped without CUDA)
 python examples/spike_repulsion.py             # 10k cells + HashGrid + overlap repulsion
 python examples/growth_contact_inhibition.py   # growth by division under contact inhibition
+python examples/spheroid_oxygen.py             # coupled spheroid: growth + oxygen + hypoxia + necrosis
 python benchmarks/bench_mechanics.py           # per-kernel mechanics timings at 1k / 10k / 100k cells
 python benchmarks/bench_lifecycle.py           # lifecycle and full cell-step timings
+python benchmarks/bench_field.py               # oxygen deposit / SOR sweep / sample / update timings
 ```
 
 ## Status
 
-Milestones 0–3 done and validated on CPU: cell arrays with preallocated capacity, HashGrid
+Milestones 0–4 done and validated on CPU: cell arrays with preallocated capacity, HashGrid
 neighbour search, overdamped overlap repulsion, stochastic division/death with deterministic
-daughter allocation, contact inhibition. Next: oxygen field (see [TODO.md](TODO.md)).
+daughter allocation, contact inhibition, a quasi-steady oxygen field (red-black SOR with
+Michaelis–Menten uptake) coupled to hypoxia, reduced division and anoxic death. The coupled
+run in `examples/spheroid_oxygen.py` produces the expected growth → oxygen gradient →
+hypoxia → necrotic core with a viable rim, all emergent from the rules. Next: the
+reproducible experiment runner (see [TODO.md](TODO.md)).
 Design notes: [docs/architecture_spike.md](docs/architecture_spike.md).

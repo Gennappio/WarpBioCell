@@ -100,6 +100,14 @@ Cells ↔ grid coupling: trilinear scatter of consumption (`wp.atomic_add` on 8 
 non-deterministic but the sum is, up to float round-off) and trilinear gather for sampling.
 Alternative without atomics: bin cells into voxels with `array_scan`, then reduce per voxel.
 
+*Implemented (Milestone 4):* option B as red-black SOR with per-axis Dirichlet/Neumann
+faces, warm-started every cell step; the scatter uses **int64 fixed-point** atomics, which
+makes the deposit exactly order-independent. CPU cost (`benchmarks/results/field_cpu.json`):
+one sweep 0.42 ms at 41³ nodes and 3.2 ms at 81³; a warm-started update on the spheroid
+needs 10–60 sweeps, i.e. the field costs less than the mechanics substeps of the same cell
+step. Cold solves need 70–400 sweeps at ω = 1.8 — multigrid (option B+) or CG (option C)
+become relevant only for grids beyond ~100³ or for cold starts.
+
 ## 5. GPU memory estimates
 
 | Item | Size |

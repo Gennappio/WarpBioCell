@@ -71,8 +71,10 @@ uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[d
 .venv/bin/python -m pytest -m gpu                      # CUDA-only tests
 .venv/bin/python examples/spike_repulsion.py           # 10k cells + HashGrid + repulsion
 .venv/bin/python examples/growth_contact_inhibition.py # growth by division under contact inhibition
+.venv/bin/python examples/spheroid_oxygen.py           # coupled spheroid: growth + oxygen + hypoxia + necrosis
 .venv/bin/python benchmarks/bench_mechanics.py         # per-kernel mechanics timings -> benchmarks/results/
 .venv/bin/python benchmarks/bench_lifecycle.py         # lifecycle and full cell-step timings
+.venv/bin/python benchmarks/bench_field.py             # deposit / SOR sweep / sample / warm update timings
 ```
 
 Not yet existing: `python -m warpbiocell.run --config configs/tumor_spheroid.yaml` (experiment runner, see docs/roadmap.md).
@@ -102,10 +104,10 @@ src/warpbiocell/
     simulation/     simulator.py (cell_step, TimeStepping)  config.py (later)
     cells/          state.py  model.py  initialization.py  lifecycle.py  mechanics.py
     spatial/        neighbors.py
-    fields/         scalar_field.py  diffusion.py  oxygen.py
+    fields/         scalar_field.py (grid, boundaries)  diffusion.py (SOR, FTCS)  oxygen.py (params, coupling)
     kernels/        cell_kernels.py  field_kernels.py  mechanics_kernels.py
     reference/      slow numpy versions of kernels, used only by tests
-    metrics/        population.py  spatial.py
+    metrics/        population.py (state counts, summary, oxygen summary, radial profile)
     io/             checkpoints.py  export.py
     visualization/  simple_3d.py
 examples/tumor_spheroid/
@@ -195,9 +197,14 @@ Concentration `O(x,y,z,t)` on a regular 3D grid:
 ∂O/∂t = D ∇²O - U(O) * rho_cells
 ```
 
-* Uptake `U(O)` must depend on concentration (Michaelis–Menten, or linear with a floor) so that oxygen can never become negative. Document the chosen form.
-* Boundary conditions are explicit and configurable. Start with constant oxygen at the domain boundaries (Dirichlet).
+* Unit: **mmHg** partial pressure. Gas-phase percentages convert at 7.13 mmHg per % O2 (5% = 36, 6% = 43, 21% = 150 mmHg); fields/oxygen.py keeps the table.
+* Uptake is Michaelis–Menten per living cell, `q(O) = uptake_max * O / (K + O)`, and `rho_cells` is the number density of living cells deposited on the grid with trilinear weights. The deposit accumulates int64 fixed-point weights, so it is deterministic whatever the thread order.
+* Boundary conditions are explicit and configurable per axis: Dirichlet (fixed `boundary_value`, the default on all faces) or Neumann (zero flux, for symmetry planes).
+* Cells outside the grid neither consume nor sample (they get the nearest face value). The domain must contain the tissue; the runner should check it.
 * No vasculature.
+* Default parameters (fields/oxygen.py): D = 7.2e6 µm²/h (2000 µm²/s, literature order of magnitude), uptake_max = 1.4e8 mmHg·µm³/h per cell (estimated from 5e-17 mol/cell/s), K = 3.4 mmHg (MicroC's 0.45% O2, estimated), boundary 38 mmHg (illustrative). Lifecycle thresholds: hypoxia 8 mmHg (~1% O2, estimated), death 2 mmHg and anoxic death rate 0.5/h (illustrative).
+
+Oxygen enters the lifecycle through `oxygen_local` (sampled trilinearly at the cell centre): `HYPOXIC` below the hypoxia threshold (precedence above crowding), `lambda = base_rate * oxygen_factor(O)` with a linear ramp from 0 at the death threshold to 1 at the hypoxia threshold, and the anoxic death rate below the death threshold. With both thresholds at 0 the lifecycle ignores oxygen.
 
 ### Time scales and field solver
 
@@ -219,7 +226,7 @@ dt_field <= dx² / (6 D)
 
 With realistic tissue values this is a fraction of a second, against a cell step of minutes to hours, which means tens of thousands of explicit substeps per cell step. Do not assume explicit sub-stepping is viable.
 
-Preferred approach: treat oxygen as **quasi-steady-state** and solve it to convergence at each cell step, using an implicit or iterative solver (Jacobi, red-black Gauss–Seidel, multigrid, or implicit LOD). Keep an explicit solver as a reference for numerical validation. Check and document stability and convergence criteria.
+Implemented approach (fields/diffusion.py): oxygen is **quasi-steady-state**, solved at every cell step by red-black SOR with the uptake linearised at the current iterate (`c = rho q_max / (K + O)`, update `O = sum_nb O / (6 + dx² c / D)`), which keeps `O >= 0`. Warm start from the previous step's field; stop at a dimensionless max-norm residual (default 1e-5; the float32 floor is ~5e-7·ω/(2−ω)) checked every `check_every` sweeps (one host sync per check). The explicit FTCS scheme exists as the numerical reference only and refuses `dt > dx²/(6D)`. On the 800 µm / 20 µm spheroid problem a warm-started step needs 10–60 sweeps.
 
 ### Simulation cycle
 
@@ -236,7 +243,7 @@ Preferred approach: treat oxygen as **quasi-steady-state** and solve it to conve
 10. collect metrics
 ```
 
-The order may change for numerical reasons. Document the chosen operator splitting.
+Implemented splitting (simulation/simulator.py `cell_step`): 1–5 as `OxygenField.update` (deposit, warm-started steady-state solve, sample), 6–7 as `lifecycle_step`, 8–9 as `relax_contacts` (all mechanics substeps, no host sync), 10 on demand via `metrics`. The lifecycle at step n sees the oxygen of the configuration at the start of step n and the crowding left by the mechanics of step n−1; daughters inherit the parent's sampled oxygen until the next field update.
 
 ---
 

@@ -60,7 +60,7 @@ HashGrid, neighbor search, contact detection, repulsive mechanics. Validate agai
 
 Division, death, contact inhibition, stochastic reproducibility (deterministic slot allocation, per-cell RNG).
 
-### Milestone 4 — Oxygen
+### Milestone 4 — Oxygen (done 2026-09-22, CPU-validated)
 
 3D field, diffusion solver, boundary conditions, cell consumption, cell sampling. Validate diffusion independently. Settle the quasi-steady-state solver choice.
 
