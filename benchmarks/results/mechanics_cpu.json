@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-09-22T09:53:53.901559+00:00",
+  "warpbiocell_version": "0.0.1",
+  "warp_version": "1.17.0",
+  "device": {
+    "alias": "cpu",
+    "name": "arm",
+    "is_cuda": false
+  },
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "python": "3.12.9",
+  "parameters": {
+    "radius_um": 8.0,
+    "dt_h": 0.005,
+    "spacing_factor": 0.9,
+    "timed_repetitions": 20,
+    "warmup": 5
+  },
+  "records": [
+    {
+      "cells": 1000,
+      "mean_contacts_per_cell": 5.208,
+      "grid_build_ms": 0.1076045009540394,
+      "contact_kernel_ms": 0.10381249740021303,
+      "integrate_ms": 0.005291502020554617,
+      "substep_ms_median": 0.3303124976810068,
+      "substep_ms_min": 0.30170800164341927,
+      "cells_per_second": 3027436.1612733514,
+      "substeps_per_second": 3027.4361612733514
+    },
+    {
+      "cells": 10000,
+      "mean_contacts_per_cell": 5.6588,
+      "grid_build_ms": 0.145729001815198,
+      "contact_kernel_ms": 2.695542003493756,
+      "integrate_ms": 0.015833495126571506,
+      "substep_ms_median": 2.8646040009334683,
+      "substep_ms_min": 2.7034170052502304,
+      "cells_per_second": 3490883.9046309264,
+      "substeps_per_second": 349.08839046309265
+    },
+    {
+      "cells": 100000,
+      "mean_contacts_per_cell": 5.84328,
+      "grid_build_ms": 0.6717919968650676,
+      "contact_kernel_ms": 23.8619789997756,
+      "integrate_ms": 0.11577050099731423,
+      "substep_ms_median": 25.879958000587067,
+      "substep_ms_min": 25.226208999811206,
+      "cells_per_second": 3863993.9059302793,
+      "substeps_per_second": 38.63993905930279
+    }
+  ]
+}
