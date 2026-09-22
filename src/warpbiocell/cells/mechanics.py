@@ -80,7 +80,7 @@ def contact_substep(population: CellPopulation, grid: NeighborGrid, params: Cont
             params.query_radius,
             params.rate,
         ],
-        outputs=[population.velocity, population.contact_count],
+        outputs=[population.velocity, population.neighbor_count],
         device=population.device,
     )
     wp.launch(

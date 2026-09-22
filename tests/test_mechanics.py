@@ -89,7 +89,7 @@ def test_warp_matches_numpy_reference(cpu):
     ref = pos.astype(np.float64)
     for _ in range(20):
         contact_substep(pop, grid, params, dt)
-        ref = contact_substep_reference(ref, radii, params.rate, dt)
+        ref = contact_substep_reference(ref, radii, params.rate, params.query_radius, dt)
         np.testing.assert_allclose(pop.positions_numpy(), ref, atol=2e-3)
 
     assert np.linalg.norm(ref - pos, axis=1).max() > 0.5  # the cluster actually moved

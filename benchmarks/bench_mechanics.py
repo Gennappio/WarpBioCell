@@ -57,7 +57,7 @@ def bench_size(n, device, substeps, warmup):
             contact_velocities,
             dim=n,
             inputs=[grid.id, pop.position, pop.radius, params.query_radius, params.rate],
-            outputs=[pop.velocity, pop.contact_count],
+            outputs=[pop.velocity, pop.neighbor_count],
             device=device,
         )
 
@@ -74,7 +74,7 @@ def bench_size(n, device, substeps, warmup):
 
     return {
         "cells": n,
-        "mean_contacts_per_cell": float(pop.contact_counts_numpy().mean()),
+        "mean_contacts_per_cell": float(pop.neighbor_counts_numpy().mean()),
         "grid_build_ms": build_med * 1e3,
         "contact_kernel_ms": contact_med * 1e3,
         "integrate_ms": integrate_med * 1e3,

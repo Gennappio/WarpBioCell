@@ -69,7 +69,7 @@ def main():
             synchronize(device)
             wall += time.perf_counter() - t0
             t_sim += substeps_per_report * args.dt
-        contacts = pop.contact_counts_numpy()
+        contacts = pop.neighbor_counts_numpy()
         print(
             f"{t_sim:>7.2f} {contacts.mean():>14.2f} {np.mean(contacts > 0):>17.1%} "
             f"{cluster_radius(pop):>20.1f} {wall:>9.2f}"
@@ -80,7 +80,7 @@ def main():
 
     if args.save:
         args.save.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(args.save, positions=pop.positions_numpy(), radii=pop.radii_numpy(), contacts=pop.contact_counts_numpy())
+        np.savez(args.save, positions=pop.positions_numpy(), radii=pop.radii_numpy(), contacts=pop.neighbor_counts_numpy())
         print(f"saved {args.save}")
 
 

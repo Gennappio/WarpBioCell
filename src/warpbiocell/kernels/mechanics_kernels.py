@@ -9,6 +9,11 @@ Model (AGENTS.md, "Mechanics"):
 Only the ratio ``k/gamma`` [1/h] enters the kernels. Each thread gathers the contributions of
 its own cell, so no atomics are needed and the result is bitwise reproducible on a given
 device for a given hash-grid build.
+
+The same pass counts ``neighbor_count[i]``: cells whose centre lies within ``query_radius``
+(= 2 * r_max + margin). ``hash_grid_query`` returns every point in the surrounding buckets
+without a distance test, so the filter is applied here. This count is the local crowding
+measure used for contact inhibition.
 """
 
 import warp as wp
@@ -26,7 +31,7 @@ def contact_velocities(
     query_radius: wp.float32,
     rate: wp.float32,  # k / gamma [1/h]
     velocity: wp.array(dtype=wp.vec3),
-    contact_count: wp.array(dtype=wp.int32),
+    neighbor_count: wp.array(dtype=wp.int32),
 ):
     tid = wp.tid()
     # Process cells in hash-grid order so neighbouring threads touch neighbouring memory.
@@ -36,19 +41,20 @@ def contact_velocities(
     r_i = radius[i]
 
     v = wp.vec3(0.0, 0.0, 0.0)
-    n_contacts = int(0)
+    n_neighbors = int(0)
 
     for j in wp.hash_grid_query(grid, x_i, query_radius):
         if j != i:
             d_vec = x_i - position[j]
             d = wp.length(d_vec)
-            overlap = r_i + radius[j] - d
-            if overlap > 0.0 and d > COINCIDENT_EPS:
-                v = v + (rate * overlap / d) * d_vec
-                n_contacts += 1
+            if d < query_radius:
+                n_neighbors += 1
+                overlap = r_i + radius[j] - d
+                if overlap > 0.0 and d > COINCIDENT_EPS:
+                    v = v + (rate * overlap / d) * d_vec
 
     velocity[i] = v
-    contact_count[i] = n_contacts
+    neighbor_count[i] = n_neighbors
 
 
 @wp.kernel
