@@ -30,6 +30,12 @@ Replace this file's content when the task is done.
   metrics/profile columns/figure/USD primvars, 109 CPU tests,
   `configs/tumor_spheroid_metabolic.yaml` + `docs/results/spheroid_metabolic.md`.
 
+* 2026-09-22 — Milestone 10: the `MicroC_warp` adapter in the OpenCellComms repository
+  (`opencellcomms_adapters/MicroC_warp/`: manifest, backend, 7 nodes, `warpbiocell` facade
+  kernel, 3 workflows, README); all three workflows verified through the OpenCellComms
+  engine on the CPU. WarpBioCell side: `Experiment.run(on_metrics=...)`,
+  `docs/integrations/opencellcomms.md`.
+
 ## Decisions taken
 
 * Validation path: reproduce a MicroC oxygen-only configuration first, then a published
@@ -44,35 +50,24 @@ Replace this file's content when the task is done.
   Isaac (2026-09-22).
 * Milestone 9: glucose and lactate as species with per-state rates; MicroC's file value for
   glucose consumption (3e-15 mol/cell/s) is not used, the stoichiometric rates are
-  (2026-09-22).
+  (2026-09-22). The remaining Milestone 9 items (MCT1 / lactate uptake, pH, multiple cell
+  types) wait for the gene network (Milestone 11) — decided 2026-09-22.
+* Milestone 10 is the OpenCellComms adapter; no LLM call inside WarpBioCell (2026-09-22).
 
 ## Open items that need a human decision
 
 * The published spheroid dataset for quantitative validation (cell line, medium O₂, growth
   curve, viable-rim thickness, necrosis onset diameter).
-* Whether the remaining Milestone 9 items (lactate uptake / MCT1, pH, multiple cell types)
-  are worth doing as rules, or should wait for the network (Milestone 11) where MicroC
-  defines them. Proposal: wait.
-* Milestone 10 scope (below): confirm or redirect.
+* The `MicroC_warp` adapter is created but **not committed** in the OpenCellComms repository
+  (that repository has unrelated uncommitted changes of yours); commit it there when ready.
+* The MicroC network exported from GINsim (MaBoSS `.bnd/.cfg` or BoolNet `.bnet`) for
+  Milestone 11.
 
-## Next: Milestone 10 — the simulator as a tool (OpenCellComms interface)
+## Next
 
-docs/roadmap.md "Expose the simulation as a scientific tool". The runner, sweeps and
-`Experiment` exist; what is missing is a machine-readable contract an agent can use without
-reading Python:
-
-1. `python -m warpbiocell.describe`: the configuration schema as JSON Schema (generated from
-   the dataclasses, with units and provenance labels from the YAML comments where possible),
-   the list of metrics with definitions and units, and the list of bundled configs and sweeps.
-2. `warpbiocell.api`: `run(config: dict | path, overrides, out_dir) -> summary dict`,
-   `sweep(base, spec, out_dir) -> rows`, `analyze(run_dir) -> onsets + final metrics`, all
-   returning plain JSON-serialisable dicts; the CLI commands call these.
-3. An experiment request format (`requests/*.yaml`): hypothesis, base config, overrides or
-   grid, seeds, observables, expected measurement — the provenance fields AGENTS.md
-   "Agent-generated experiments" requires — executed by `python -m warpbiocell.request`.
-4. Tests for the schema (every config key documented), the API round trip, and a request
-   run end to end.
-5. Do not add any LLM call: the agent lives outside (OpenCellComms); WarpBioCell only
-   offers the contract.
-
-Then Milestone 6 as soon as the CUDA machine is available; Milestone 11 last.
+* Milestone 6 — performance on the CUDA machine (README "On a CUDA machine"): run the gpu
+  tests, the three benchmarks at 10³–10⁶ cells, commit `benchmarks/results/*_cuda0.json`,
+  then profile the contact kernel and the SOR sweeps and decide whether anything merits an
+  upstream Warp issue (docs/upstream.md).
+* Milestone 11 — gene regulatory network per cell (docs/vision.md design notes), once the
+  network file is available.
