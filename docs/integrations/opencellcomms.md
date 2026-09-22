@@ -15,13 +15,17 @@ GUI-visible nodes that assemble a WarpBioCell configuration in the engine contex
 | `define_warp_substance` (cloneable) | `oxygen` or a `species[]` entry (per-state uptake, production, source) |
 | `define_warp_cell_rules` | `lifecycle` (division, inhibition, thresholds, MicroC necrosis rule) |
 | `define_warp_tissue` | `geometry` (sphere / ellipsoid / union / mask, confinement, oxygen source) |
+| `define_warp_network` | `network` (MaBoSS / BoolNet model file, update mode, input clamps, fate outputs) and the `lifecycle` keys of the `network` phenotype model; defaults to MicroC's own `jaya.bnd` |
 | `run_warpbiocell_simulation` | validates with `config_from_dict`, runs `Experiment.run`, streams `[OCC_EVENT]` JSON lines |
 | `run_warpbiocell_sweep` | `Sweep` over a grid of dotted keys × seeds, `summary.csv` with onsets |
 | `summarize_warpbiocell_run` | report + `context['warpbiocell_summary']` |
 
 plus a `warpbiocell` facade kernel for workflows that carry the whole configuration in
-`metadata.warpbiocell`. Three workflows ship with it: the metabolic spheroid, the tumour in
-an ellipsoidal tissue, and the oxygen-boundary sweep.
+`metadata.warpbiocell`. Four workflows ship with it: the metabolic spheroid, the tumour in
+an ellipsoidal tissue, the oxygen-boundary sweep, and the spheroid with MicroC's gene network
+in every cell (`microc_warp_network.json`, which reproduces `docs/results/spheroid_network.md`
+exactly: 5 148 cells, 1 767 dead, 110 s). The summary node prints the fate-node columns
+(`network_*_cells`) when a run has them.
 
 ## The contract the adapter relies on (keep stable)
 
@@ -34,7 +38,12 @@ an ellipsoidal tissue, and the oxygen-boundary sweep.
 * `warpbiocell.simulation.sweep.SweepSpec` / `Sweep(spec, base_dict).run(dir, device, figures, log)`.
 * Metrics column names of `io/run_output.py` (`cells`, `living_cells`, `dead_cells`,
   `hypoxic_cells`, `proliferative_cells`, `quiescent_cells`, `spheroid_radius_um`,
-  `oxygen_cells_min_mmHg`, `glucose_cells_min_mM`, `lactate_cells_max_mM`, `wall_s`, ...).
+  `oxygen_cells_min_mmHg`, `glucose_cells_min_mM`, `lactate_cells_max_mM`,
+  `network_{proliferation,apoptosis,growth_arrest,necrosis}_cells` (empty without a
+  network), `wall_s`, ...).
+* The `network` configuration section (`file`, `cfg`, `update`, `inputs`, `outputs`) and
+  `lifecycle.phenotype_model`; `config_from_dict` takes model paths as given (absolute, or
+  relative to the working directory — the adapter resolves them before building the dict).
 
 A change to any of these must be mirrored in the adapter (`backend/warpbiocell_backend.py`).
 

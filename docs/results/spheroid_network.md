@@ -90,3 +90,7 @@ this run reports the MaBoSS-like semantics with the model's own `.cfg`.
   switch. There is still no lactate uptake by oxygenated cells.
 * `HYPOXIC` in network mode is the oxygen marker at the `Oxygen_supply` threshold (15.7
   mmHg), not the 8 mmHg of the rule model; the per-state uptake factors follow it.
+* The radial metrics `necrotic_radius_um`, `viable_rim_um` and the "necrosis onset" count
+  every dead cell, whatever killed it. Here most deaths are apoptotic, so "necrosis onset at
+  1 h" in the summary means the first apoptotic death; the necrosis fate node is reported
+  separately (`network_necrosis_cells`).
