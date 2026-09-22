@@ -68,9 +68,14 @@ Division, death, contact inhibition, stochastic reproducibility (deterministic s
 
 Couple cells + mechanics + oxygen. Produce growth, oxygen gradient, hypoxia, necrosis. Analyze quantitatively against the chosen validation data.
 
-### Milestone 6 — Performance
+### Milestone 5.1 — First scientific experiment (in progress, 2026-09-22)
 
-Profile at 1k, 10k, 100k cells. Identify actual bottlenecks. Investigate whether any limitation merits a Warp upstream contribution.
+Sweep runner (`python -m warpbiocell.sweep`), oxygen-boundary sensitivity study with seed
+replicates, `docs/model.md` (equations and assumptions in one place), continuous integration.
+
+### Milestone 6 — Performance (waits for the CUDA machine)
+
+Profile at 1k, 10k, 100k, 10^6 cells on CUDA. Identify actual bottlenecks. Investigate whether any limitation merits a Warp upstream contribution. The user runs this by uploading the repository to the GPU machine (README, "On a CUDA machine").
 
 ### Milestone 7 — Patient geometry
 
@@ -80,13 +85,17 @@ Segmentation mask → cell initialization inside tissue. Requires an answer to t
 
 Cellular state → USD, then a small Isaac for Healthcare demonstrator.
 
-### Milestone 9 — Advanced biology
+### Milestone 9 — Advanced biology (fields and phenotypes)
 
-Candidates: glucose, lactate, metabolic phenotypes, drug response, spatial omics, multiple cell types. Implement selectively.
+Candidates: glucose, lactate, pH, metabolic phenotypes, drug response, spatial omics, multiple cell types. Implement selectively; MicroC's `diffusion-parameters.txt` (docs/reference/microc_parameters.md) is the reference set for the metabolic fields.
 
 ### Milestone 10 — OpenCellComms
 
 Expose the simulation as a scientific tool. Example: "Test how oxygen availability affects necrotic-core formation." The agent generates the parameter sweep, simulations, analysis, comparison and next experiment.
+
+### Milestone 11 — Gene regulatory network per cell (last, decided 2026-09-22)
+
+A Boolean network inside every agent, MaBoSS-style, as an alternative phenotype model to the built-in rules. Design notes in [vision.md](vision.md) ("Gene network"). Needs the MicroC network exported from GINsim (MaBoSS `.bnd/.cfg` or BoolNet `.bnet`). This is what makes MicroC's gene-perturbation experiments reproducible on the GPU; it is deliberately scheduled after the imaging and visualization milestones.
 
 ## Experiment runner
 

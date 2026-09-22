@@ -151,6 +151,36 @@ MRI → segmented tumor → initial cellular state → GPU ABM
 
 A useful north star, not an MVP requirement.
 
+### Gene network per cell (Milestone 11, design notes)
+
+Decided 2026-09-22: a Boolean gene regulatory network inside every agent is worth building
+— it is what makes MicroC's gene-perturbation experiments (knockouts, overexpression, p53,
+MCT1) reproducible on the GPU, and it fits the architecture: ~70 nodes are 128 bits per
+cell, updates are embarrassingly parallel, and the per-cell RNG streams keep runs
+reproducible. It is scheduled last so that imaging and visualization come first.
+
+Design to follow when the time comes:
+
+* input format BoolNet `.bnet` (`A, B & !C`), optionally MaBoSS `.bnd/.cfg` rates; the MicroC
+  network is exported from GINsim in one of these formats (no `.zginml` parser);
+* rules compiled to a postfix program in integer arrays, evaluated by one interpreter kernel
+  with a boolean stack held in a `uint64`; code generation only if profiling asks for it;
+* three update semantics on the same core: synchronous (tests), asynchronous random
+  (MicroC), continuous-time Markov with `rate_up`/`rate_down` (MaBoSS; primary);
+* environment → input nodes clamped every cell step (`Oxygen_supply = O > threshold`,
+  `Glucose_supply`, ...; the thresholds are MicroC's `input-parameters.txt`); output nodes
+  `Proliferation / Apoptosis / Growth_Arrest / Necrosis` read by the lifecycle, which keeps the
+  stochastic division rate and the space constraint;
+* the built-in rules remain the `rules` phenotype model; the network is the `network` model,
+  chosen in the configuration — the two use cases that justify the abstraction;
+* validation: toy networks with known attractors (exact, synchronous), a single MaBoSS node
+  against the analytical two-state Markov chain (statistical), a small network against MaBoSS
+  itself when its Python package is available, then the MicroC network with oxygen inputs only.
+
+Related prior art: PhysiBoSS (PhysiCell + MaBoSS, CPU); a GPU MaBoSS for networks alone has
+been published (to verify); a per-agent network inside a spatial GPU ABM with coupled fields
+appears to be new.
+
 ## Open questions
 
 These are unresolved and should be answered before the corresponding milestone becomes primary work.

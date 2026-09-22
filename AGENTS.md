@@ -41,6 +41,8 @@ The MVP contains ONLY: cells as agents, 3D positions, radius, cell type/state, l
 
 Do NOT implement yet: glucose, lactate, ATP metabolism, MCT1, intracellular or gene regulatory networks, immune cells, drug pharmacokinetics, vascularization, mutations, spatial transcriptomics, LLM agents, Isaac integration, clinical prediction.
 
+The MVP (Milestones 0–5) is implemented and CPU-validated; GPU numbers wait for the CUDA machine. Work now follows the milestone order in docs/roadmap.md. The gene regulatory network is deliberately the **last** milestone (11): keep the built-in phenotype rules as the only phenotype model until then, and do not add network hooks speculatively.
+
 ---
 
 ## Environment
