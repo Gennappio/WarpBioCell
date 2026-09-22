@@ -25,7 +25,7 @@ reported at the end.
 
 Core radii are the outer edge of the outermost 20 µm shell in which at least half of the cells
 are non-proliferative / hypoxic-or-dead / dead (`metrics/population.py::shell_radii`);
-rims are R99 minus the corresponding core radius. Resolution: one shell, 20 µm.
+rims are R99 minus the corresponding core radius, floored at 0 (a rim of 0 means no shell is majority-proliferative / everything is necrotic). Resolution: one shell, 20 µm.
 
 Events:
 

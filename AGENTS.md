@@ -17,6 +17,7 @@ Related documents:
 * [docs/vision.md](docs/vision.md) — long-term architecture, future integrations, open questions;
 * [docs/roadmap.md](docs/roadmap.md) — milestones, definition of MVP complete, experiment runner, sweeps;
 * [docs/upstream.md](docs/upstream.md) — upstream contribution strategy and PR discipline;
+* [docs/integrations/opencellcomms.md](docs/integrations/opencellcomms.md) — the OpenCellComms adapter (`MicroC_warp`) and the API contract it relies on;
 * [TODO.md](TODO.md) — the current task.
 
 Read `TODO.md` first. Read the other documents only when the task touches them.

@@ -75,6 +75,13 @@ def test_run_writes_the_full_directory_layout(tmp_path):
     assert figures == ["cells_3d.png", "oxygen_slice.png", "population.png", "radial_profile.png"]
 
 
+def test_on_metrics_observer_receives_every_row():
+    rows = []
+    result = Experiment(_tiny()).run(on_metrics=rows.append)
+    assert [r["time_h"] for r in rows] == [r["time_h"] for r in result.metrics] == [0.0, 1.0, 2.0, 3.0]
+    assert rows[-1]["cells"] == result.summary["cells"]
+
+
 def test_in_memory_runs_are_reproducible_and_seed_dependent():
     a = Experiment(_tiny()).run()
     b = Experiment(_tiny()).run()

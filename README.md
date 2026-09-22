@@ -47,6 +47,13 @@ versions, git commit, device, status), `metrics.csv`, `profiles.csv`, `checkpoin
 micrometre units, one time code per simulated hour, cells as a point instancer coloured by
 state (or oxygen with `--color oxygen`), the tissue surface as points.
 
+## OpenCellComms
+
+WarpBioCell is a plugin of OpenCellComms: the `MicroC_warp` adapter (in the OpenCellComms
+repository) exposes domain / substance / cell-rule / tissue nodes, a run node, a sweep node
+and a summary node, and ships three workflows. Contract and installation:
+[docs/integrations/opencellcomms.md](docs/integrations/opencellcomms.md).
+
 ## On a CUDA machine
 
 Nothing has been run on CUDA yet; everything takes the device from configuration. Checklist:

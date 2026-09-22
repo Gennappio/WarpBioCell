@@ -133,8 +133,8 @@ class Experiment:
             "necrotic_radius_um": radii["necrotic_radius"],
             "hypoxic_radius_um": radii["hypoxic_radius"],
             "non_proliferative_radius_um": radii["non_proliferative_radius"],
-            "viable_rim_um": summary["spheroid_radius"] - radii["necrotic_radius"],
-            "proliferating_rim_um": summary["spheroid_radius"] - radii["non_proliferative_radius"],
+            "viable_rim_um": max(0.0, summary["spheroid_radius"] - radii["necrotic_radius"]),
+            "proliferating_rim_um": max(0.0, summary["spheroid_radius"] - radii["non_proliferative_radius"]),
             "oxygen_cells_mean_mmHg": summary.get("oxygen_cells_mean", float("nan")),
             "oxygen_cells_min_mmHg": summary.get("oxygen_cells_min", float("nan")),
             "oxygen_grid_mean_mmHg": summary.get("oxygen_grid_mean", float("nan")),
@@ -152,7 +152,14 @@ class Experiment:
 
     # ---- run ----------------------------------------------------------------------------------
 
-    def run(self, output_dir: str | Path | None = None, log: Callable[[str], None] | None = None) -> RunResult:
+    def run(
+        self,
+        output_dir: str | Path | None = None,
+        log: Callable[[str], None] | None = None,
+        on_metrics: Callable[[dict], None] | None = None,
+    ) -> RunResult:
+        """Run to the end. ``log`` receives human-readable lines; ``on_metrics`` receives every
+        metrics row as a dict (for observers that want numbers, e.g. an orchestrator)."""
         cfg = self.config
         out = cfg.output
         stepping = self.stepping
@@ -187,6 +194,8 @@ class Experiment:
                 result.metrics.append(row)
                 if output:
                     output.write_metrics(row)
+                if on_metrics:
+                    on_metrics(row)
                 if log:
                     log(
                         f"t={self.time_h:7.2f} h  cells={row['cells']:7d}  prolif={row['proliferative_cells']:6d}  "

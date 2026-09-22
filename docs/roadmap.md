@@ -89,7 +89,7 @@ Cellular state → USD, then a small Isaac for Healthcare demonstrator.
 
 Candidates: glucose, lactate, pH, metabolic phenotypes, drug response, spatial omics, multiple cell types. Implement selectively; MicroC's `diffusion-parameters.txt` (docs/reference/microc_parameters.md) is the reference set for the metabolic fields.
 
-### Milestone 10 — OpenCellComms
+### Milestone 10 — OpenCellComms (done 2026-09-22 as the MicroC_warp adapter in the OpenCellComms repository; docs/integrations/opencellcomms.md)
 
 Expose the simulation as a scientific tool. Example: "Test how oxygen availability affects necrotic-core formation." The agent generates the parameter sweep, simulations, analysis, comparison and next experiment.
 
