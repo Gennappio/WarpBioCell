@@ -77,6 +77,7 @@ uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[d
 .venv/bin/python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml \
     --sweep configs/sweeps/oxygen_boundary.yaml [--dry-run]                        # grid x seeds -> summary.csv
 .venv/bin/python -m warpbiocell.run --config configs/tumor_in_ellipsoid.yaml       # tumour filling a tissue region
+.venv/bin/python -m warpbiocell.export_usd runs/<run dir> [--out x.usda] [--color oxygen]  # checkpoints -> OpenUSD (usd extra)
 .venv/bin/python examples/analyze_sweep.py runs/<sweep dir> --zero-order-oxygen --figure out.png
 .venv/bin/python examples/spike_repulsion.py           # 10k cells + HashGrid + repulsion
 .venv/bin/python examples/growth_contact_inhibition.py # growth by division under contact inhibition
@@ -111,7 +112,7 @@ Priorities, in approximately this order: correctness, clarity, scientific interp
 ```text
 src/warpbiocell/
     simulation/     simulator.py (cell_step, TimeStepping)  config.py (YAML -> dataclasses)  experiment.py (Experiment, RunResult)
-    io/             run_output.py (run directory, CSV/JSON)  checkpoints.py (.npz)
+    io/             run_output.py (run directory, CSV/JSON)  checkpoints.py (.npz)  export.py (OpenUSD, post-processing only)
     visualization/  figures.py (matplotlib, optional)
     run.py          python -m warpbiocell.run
     cells/          state.py  model.py  initialization.py  lifecycle.py  mechanics.py
@@ -122,6 +123,7 @@ src/warpbiocell/
     reference/      slow numpy versions of kernels, used only by tests
     metrics/        population.py (state counts, summary, oxygen summary, radial profile)  timeseries.py (onsets)
     sweep.py        python -m warpbiocell.sweep
+    export_usd.py   python -m warpbiocell.export_usd
 examples/  tests/  benchmarks/  docs/  configs/
 ```
 
@@ -247,7 +249,11 @@ A tissue region is a signed-distance field (negative inside) on the oxygen grid,
 * confinement: a cell whose surface pokes out by `p = sdf(x_i) + r_i > 0` is pushed back at `wall_rate * p` along the SDF gradient — the same overdamped law as the cell–cell contact, with its own stability check;
 * oxygen source: with `oxygen_source: tissue_surface` every grid node outside the tissue is pinned to `boundary_mmHg` (a vessel-at-the-surface approximation); `box` keeps the domain faces.
 
-The boundary is rigid: growth inside a fixed region compresses the cells and contact inhibition then stops it. A deformable tissue is the mechanobiology extension in docs/vision.md. No clinical claim is attached to a mask; it is a geometry.
+The boundary is rigid: growth inside a fixed region compresses the cells and contact inhibition then stops it. A deformable tissue is the mechanobiology extension in docs/vision.md. No clinical claim is attached to a mask; it is a geometry. Known limitation: the NIfTI loader uses the voxel sizes only and ignores the affine's orientation and translation (`mask_origin_um` supplies the offset); a real segmentation has not been exercised and is not needed until an imaging pipeline exists.
+
+### OpenUSD export (Milestone 8)
+
+`io/export.py` turns a run's checkpoints into a USD stage after the fact: `/World/Cells` is a `UsdGeomPointInstancer` with one time sample per checkpoint (positions, radii as scales, stable slot ids, `displayColor` by state or oxygen, `primvars:state`, `primvars:oxygen`), `/World/Tissue` the surface points of the region, `/World/Domain` the grid box as a guide. Units: metres per unit 1e-6, one time code per simulated hour. No simulation module imports `pxr` (tested). The Isaac for Healthcare demonstrator is deferred to a machine that has Isaac.
 
 ### Simulation cycle
 

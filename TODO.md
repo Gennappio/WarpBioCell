@@ -17,12 +17,14 @@ Replace this file's content when the task is done.
   `docs/reference/microc_parameters.md` with `configs/microc_oxygen.yaml`.
 * 2026-09-22 — Milestone 5.1: sweep runner, oxygen-boundary sensitivity study
   (`docs/results/oxygen_boundary_sweep.md`), `docs/model.md`, GitHub Actions CI.
-* 2026-09-22 — Milestone 7, tissue geometry: signed-distance regions from synthetic shapes
-  (sphere, ellipsoid, union) or voxel masks (scipy EDT, NIfTI via nibabel, optional `masks`
-  extra), seeding with a cell budget, confinement by a wall contact law, oxygen pinned on
-  every node outside the tissue, `geometry` config section, cut-away 3-D figure, 95 CPU
-  tests, `configs/tumor_in_ellipsoid.yaml` with `docs/results/tumor_in_ellipsoid.md`;
-  scale-gap numbers measured in `docs/vision.md`.
+* 2026-09-22 — Milestone 7, tissue geometry: SDF regions (synthetic shapes, voxel masks),
+  seeding with a cell budget, wall confinement, tissue-surface oxygen source,
+  `configs/tumor_in_ellipsoid.yaml` + `docs/results/tumor_in_ellipsoid.md`, measured
+  scale gap in `docs/vision.md`.
+* 2026-09-22 — Milestone 8 (USD part): `python -m warpbiocell.export_usd <run dir>` writes
+  a point-instancer stage from the checkpoints (positions, radii, stable ids, colour by
+  state or oxygen, tissue surface, grid box; micrometre units, one time code per hour);
+  `usd` extra; checkpoints now carry the tissue SDF; 99 CPU tests.
 
 ## Decisions taken
 
@@ -33,32 +35,41 @@ Replace this file's content when the task is done.
 * Gene regulatory network: last milestone (11), design notes in `docs/vision.md`; no network
   hooks before then (2026-09-22).
 * Patient geometry: synthetic shapes first, masks as a thin loader; the tissue boundary is
-  rigid until the mechanobiology extension (2026-09-22).
+  rigid until the mechanobiology extension. A real NIfTI segmentation is **not** needed now:
+  the mask path is covered by synthetic voxel masks and a nibabel roundtrip; the loader's
+  known limitation (affine orientation ignored) is documented and waits for an imaging
+  pipeline (2026-09-22).
+* Milestone 8 stops at the OpenUSD export; the Isaac for Healthcare demonstrator waits for a
+  machine that has Isaac (2026-09-22).
 
 ## Open items that need a human decision
 
 * The published spheroid dataset for quantitative validation (cell line, medium O₂, growth
   curve, viable-rim thickness, necrosis onset diameter).
-* A real segmentation mask (NIfTI) to exercise `geometry.shape: mask` end to end; only
-  synthetic voxel masks have been used so far.
-* Milestone 8 needs `usd-core` (pip, ~50 MB) for OpenUSD export; the Isaac for Healthcare
-  demonstrator cannot be built on the development Mac — decide whether Milestone 8 stops at
-  the USD export (proposal: yes, the Isaac part waits for a machine that has it).
+* Milestone 9 scope: the proposal below adds glucose as a second field with a rule-based
+  metabolic phenotype (no network). Confirm or redirect.
 
-## Next: Milestone 8 — OpenUSD export (Isaac demonstrator deferred)
+## Next: Milestone 9 — metabolic fields (glucose first)
 
-docs/roadmap.md "Cellular state → USD".
+docs/roadmap.md "Advanced biology"; MicroC's `diffusion-parameters.txt` is the reference set
+(`docs/reference/microc_parameters.md`: glucose D = 6.7e-11 m²/s, uptake 3e-15 mol/cell/s,
+5 mM boundary, 4 mM activation threshold; lactate produced at 3e-15 mol/cell/s, 1 mM boundary).
 
-1. `io/export.py`: write a USD stage with a `UsdGeomPointInstancer` (one prototype sphere,
-   per-cell positions and scales, per-cell colour from state or oxygen as a primvar) and one
-   time sample per checkpoint, plus the tissue surface as a mesh (marching cubes of the SDF
-   is more than needed: export the SDF zero level as a point cloud or leave it to the
-   consumer) — start with cells only.
-2. Optional `usd` extra (`usd-core`); export skipped with a clear message when absent.
-3. `python -m warpbiocell.run ... --set output.usd=true` or a post-processing command
-   `python -m warpbiocell.export_usd runs/<dir>` that reads the checkpoints (preferred: keeps
-   export out of the simulation loop, AGENTS.md "Design principles").
-4. Tests: a two-checkpoint run exports a stage whose point count and time samples match the
-   checkpoints (skipped without `usd-core`); no simulation module imports USD.
-5. Then Milestone 9 (metabolic fields: glucose, lactate; MicroC parameters are recorded) or
-   Milestone 6 as soon as the CUDA machine is available.
+1. Generalise the field machinery to several species: `fields/species.py` with a list of
+   `SpeciesField` (name, unit, kinetics, boundary), each reusing `ScalarField`, the deposit and
+   the SOR solver; per-cell sampled values in a `(capacity, n_species)` array or one array per
+   species (prefer one array per species: the kernels stay simple).
+2. Per-state consumption and production: a small table `rate[state, species]` so that hypoxic
+   (glycolytic) cells consume more glucose and produce lactate while oxygenated cells
+   consume oxygen — the rule-based stand-in for MicroC's metabolic network, labelled as such.
+3. Lifecycle: MicroC's necrosis rule (oxygen **and** glucose below their thresholds) as an
+   option next to the current oxygen-only death; glucose-limited division factor.
+4. Units: glucose and lactate in mM; document the conversion of MicroC's mol/cell/s rates.
+5. Tests: two-species steady state against the dense exact solution, conservation of the
+   produced lactate flux, necrosis rule, and the spheroid with glucose (viable rim thinner
+   when glucose is limiting).
+6. Results note: glucose-limited vs oxygen-limited spheroid, compared qualitatively with
+   MicroC's Fig. 6 (glucose and lactate profiles).
+
+Milestone 6 (performance) runs as soon as the CUDA machine is available; Milestone 10
+(OpenCellComms) and 11 (gene network) stay last.

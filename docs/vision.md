@@ -82,7 +82,7 @@ The Warp implementation becomes one provider. Isaac must not depend on internal 
 
 ### OpenUSD
 
-The preferred bridge toward Isaac visualization. `UsdGeomPointInstancer` is a candidate for large cell populations. Appearance may encode cell type, cell state or oxygen level. Photorealism is not a priority during the scientific MVP.
+The preferred bridge toward Isaac visualization. Implemented (Milestone 8, 2026-09-22): `io/export.py` writes a `UsdGeomPointInstancer` with one time sample per checkpoint, colour by state or oxygen, the tissue surface as points and the grid box as a guide; micrometre units, one time code per hour. A `CellularStateProvider` for Isaac would read the same checkpoints or the live arrays; it is not built until a machine with Isaac for Healthcare is available. Photorealism is not a priority during the scientific MVP.
 
 ### Patient-specific geometry
 

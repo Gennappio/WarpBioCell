@@ -27,6 +27,7 @@ python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml \
     --sweep configs/sweeps/oxygen_boundary.yaml                        # 5 boundary values x 3 seeds -> summary.csv
 python examples/analyze_sweep.py runs/<timestamp>_oxygen_boundary --zero-order-oxygen --figure sweep.png
 python -m warpbiocell.run --config configs/tumor_in_ellipsoid.yaml        # tumour filling an ellipsoidal tissue region
+python -m warpbiocell.export_usd runs/<timestamp>_tumor_in_ellipsoid       # checkpoints -> cells.usdc (OpenUSD point instancer)
 pytest                                         # CPU-safe suite
 pytest -m gpu                                  # CUDA-only tests (skipped without CUDA)
 python examples/spike_repulsion.py             # 10k cells + HashGrid + overlap repulsion
@@ -40,7 +41,10 @@ python benchmarks/bench_field.py               # oxygen deposit / SOR sweep / sa
 A run directory holds `config.yaml` (verbatim), `metadata.json` (resolved config, seed,
 versions, git commit, device, status), `metrics.csv`, `profiles.csv`, `checkpoint/*.npz` and
 `figures/*.png` (matplotlib, optional: `pip install -e ".[plots]"`). Segmentation masks
-(NIfTI) need `pip install -e ".[masks]"` (scipy, nibabel).
+(NIfTI) need `pip install -e ".[masks]"` (scipy, nibabel); the OpenUSD export needs
+`pip install -e ".[usd]"` (usd-core). Open `cells.usdc` in usdview, Omniverse or Isaac Sim:
+micrometre units, one time code per simulated hour, cells as a point instancer coloured by
+state (or oxygen with `--color oxygen`), the tissue surface as points.
 
 ## On a CUDA machine
 
@@ -63,7 +67,8 @@ allocation, integer deposit); CPU and CUDA agree to float round-off in the physi
 
 ## Status
 
-Milestones 0–7 done and validated on CPU: cell arrays with preallocated capacity, HashGrid
+Milestones 0–8 done and validated on CPU (Milestone 8 stops at the USD export; the Isaac
+for Healthcare demonstrator waits for a machine that has it): cell arrays with preallocated capacity, HashGrid
 neighbour search, overdamped overlap repulsion, stochastic division/death with deterministic
 daughter allocation, contact inhibition, a quasi-steady oxygen field (red-black SOR with
 Michaelis–Menten uptake) coupled to hypoxia, reduced division and anoxic death, and a

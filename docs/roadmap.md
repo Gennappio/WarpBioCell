@@ -81,7 +81,7 @@ Profile at 1k, 10k, 100k, 10^6 cells on CUDA. Identify actual bottlenecks. Inves
 
 Segmentation mask → cell initialization inside tissue. Requires an answer to the scale-gap question in [vision.md](vision.md). No clinical claims.
 
-### Milestone 8 — OpenUSD / Isaac
+### Milestone 8 — OpenUSD / Isaac (USD export done 2026-09-22; Isaac demonstrator deferred to a machine that has it)
 
 Cellular state → USD, then a small Isaac for Healthcare demonstrator.
 
