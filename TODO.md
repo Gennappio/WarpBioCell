@@ -11,42 +11,46 @@ Replace this file's content when the task is done.
 * 2026-09-22 — Milestone 4, oxygen: 3-D grid, deterministic deposit, red-black SOR steady
   state with Michaelis–Menten uptake, FTCS reference, hypoxia / oxygen-dependent division /
   anoxic death; numerical, computational and biological tests.
-* 2026-09-22 — Milestone 5, experiment runner: YAML config with unit-named keys and strict
-  schema (`simulation/config.py`), `Experiment(config).run(dir)`, `python -m warpbiocell.run`
-  with `--set` overrides, run directory (config, metadata, metrics.csv, profiles.csv,
-  checkpoints, figures), 73 CPU tests, CUDA-vs-CPU test set ready for the GPU machine.
-  First quantitative analysis in `docs/results/spheroid_baseline.md`: necrotic core with a
-  stable 125 µm viable rim at 38 mmHg; hypoxia onset at 580 µm diameter at 150 mmHg.
+* 2026-09-22 — Milestone 5, experiment runner: YAML config, `Experiment(config).run(dir)`,
+  `python -m warpbiocell.run`, run directories, CUDA-vs-CPU test set; first quantitative
+  analysis in `docs/results/spheroid_baseline.md`; MicroC parameters recorded in
+  `docs/reference/microc_parameters.md` with `configs/microc_oxygen.yaml`.
+* 2026-09-22 — Milestone 5.1: sweep runner (`python -m warpbiocell.sweep`), oxygen-boundary
+  sensitivity study (`docs/results/oxygen_boundary_sweep.md`), `docs/model.md`, GitHub
+  Actions CI.
 
 ## Decisions taken
 
 * Validation path: reproduce a MicroC oxygen-only configuration first, then a published
-  spheroid dataset (agreed 2026-09-22).
+  spheroid dataset (2026-09-22).
 * CUDA: tested at the end, on the user's GPU machine, by uploading the repository there
   (`README.md`, "On a CUDA machine"). No GPU numbers before that.
+* Gene regulatory network: last milestone (11), design notes in `docs/vision.md`; no network
+  hooks before then (2026-09-22).
 
 ## Open items that need a human decision
 
-* MicroC's exact oxygen-only parameter set (Table C of their S1 Text is not in the repository):
-  needed for the like-for-like 2-D slab reproduction.
+* The published spheroid dataset for quantitative validation (cell line, medium O₂, growth
+  curve, viable-rim thickness, necrosis onset diameter).
+* Whether Milestone 7 should start with NIfTI masks (needs `nibabel`, a new dependency) or
+  with synthetic geometries (a mesh or an SDF) to build the seeding and confinement
+  machinery first. Default proposal: synthetic first, NIfTI as a thin loader afterwards.
 
-## Next: Milestone 5.1 — first scientific experiment (oxygen-boundary sensitivity)
+## Next: Milestone 7 — patient geometry (Milestone 6 waits for the CUDA machine)
 
-docs/roadmap.md "First sensitivity study", runnable on the CPU in minutes:
+docs/roadmap.md; the scale-gap question in docs/vision.md must be answered as part of it.
 
-1. `python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml --sweep configs/sweeps/oxygen_boundary.yaml`:
-   a sweep file is a list of override sets plus a seed list; every run is an ordinary run
-   directory under `runs/<sweep>/`, and `summary.csv` collects the final metrics per run.
-2. Study: `oxygen.boundary_mmHg` in {20, 38, 60, 100, 150} × 3 seeds, 7 days (at 150 mmHg
-   12 days). Measure final viable count, necrotic fraction, spheroid radius, hypoxia-onset
-   radius, radial oxygen gradient, plus the seed-to-seed spread the results doc flags as
-   unmeasured.
-3. `docs/results/oxygen_boundary_sweep.md` with a figure of onset radius vs boundary oxygen
-   against the zero-order estimate.
-4. `docs/model.md`: equations, operator splitting, every assumption and parameter provenance
-   in one place (the MVP-completion item "documentation explains equations and assumptions").
-5. GitHub Actions: `pytest` on CPU on every push (Milestone 0 leftover).
-6. MicroC 2-D slab configuration (`oxygen.grid` with Neumann faces in z and a one-cell-thick
-   layer) once the parameter set is available.
-
-Then Milestone 7 (patient geometry) — Milestone 6 (performance) waits for the CUDA machine.
+1. Geometry representation: a signed-distance field on the same kind of regular grid as the
+   oxygen field (`fields/scalar_field.py`), built from a synthetic shape first (sphere,
+   ellipsoid, union of spheres) and later from a segmentation mask.
+2. Seeding: fill the region `sdf < 0` with cells at a target packing (jittered lattice, as
+   `spherical_cluster` does), with an option to seed only a sub-volume.
+3. Confinement: a boundary force in the mechanics kernel from the sampled SDF gradient
+   (cells pushed back inside), documented as a contact law like the cell–cell one.
+4. Field domain: Dirichlet oxygen on the tissue boundary voxels rather than on the box faces
+   (a "vessel at the tissue surface" first approximation), configurable.
+5. Tests: seeding density and containment, SDF sampling exactness for a sphere, a cell
+   pushed out of the region returns, spheroid results unchanged when the region is a large
+   sphere.
+6. Scale gap: measure cells per mm³ at the current packing and state in `docs/vision.md`
+   what sub-volume a 10⁶-cell budget covers; decide coarse-graining later, with data.

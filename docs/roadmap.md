@@ -68,7 +68,7 @@ Division, death, contact inhibition, stochastic reproducibility (deterministic s
 
 Couple cells + mechanics + oxygen. Produce growth, oxygen gradient, hypoxia, necrosis. Analyze quantitatively against the chosen validation data.
 
-### Milestone 5.1 — First scientific experiment (in progress, 2026-09-22)
+### Milestone 5.1 — First scientific experiment (done 2026-09-22)
 
 Sweep runner (`python -m warpbiocell.sweep`), oxygen-boundary sensitivity study with seed
 replicates, `docs/model.md` (equations and assumptions in one place), continuous integration.

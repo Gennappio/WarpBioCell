@@ -23,6 +23,9 @@ Warp has no CUDA backend on macOS, so local runs are CPU-only. All code takes th
 python -m warpbiocell.run --config configs/tumor_spheroid.yaml        # baseline experiment -> runs/<timestamp>_tumor_spheroid/
 python -m warpbiocell.run --config configs/tumor_spheroid.yaml \
     --set oxygen.boundary_mmHg=150 --set oxygen.grid.box_um=1200       # culture-like variant via overrides
+python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml \
+    --sweep configs/sweeps/oxygen_boundary.yaml                        # 5 boundary values x 3 seeds -> summary.csv
+python examples/analyze_sweep.py runs/<timestamp>_oxygen_boundary --zero-order-oxygen --figure sweep.png
 pytest                                         # CPU-safe suite
 pytest -m gpu                                  # CUDA-only tests (skipped without CUDA)
 python examples/spike_repulsion.py             # 10k cells + HashGrid + overlap repulsion

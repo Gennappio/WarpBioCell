@@ -48,12 +48,20 @@ def load_summary(directory: Path):
     return key, rows, meta
 
 
+def _stats(samples):
+    """Mean, sd and number of NaNs; NaN mean when every sample is NaN (no warning)."""
+    valid = [s for s in samples if not np.isnan(s)]
+    if not valid:
+        return float("nan"), float("nan"), len(samples)
+    return float(np.mean(valid)), float(np.std(valid)), len(samples) - len(valid)
+
+
 def aggregate(key, rows):
     values = sorted({r[key] for r in rows})
     table = {}
     for v in values:
         group = [r for r in rows if r[key] == v]
-        table[v] = {q: (np.nanmean([g[q] for g in group]), np.nanstd([g[q] for g in group]), sum(np.isnan(g[q]) for g in group)) for q, _ in QUANTITIES}
+        table[v] = {q: _stats([g[q] for g in group]) for q, _ in QUANTITIES}
         table[v]["n"] = len(group)
     return values, table
 

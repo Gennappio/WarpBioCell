@@ -73,7 +73,10 @@ uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[d
 .venv/bin/python -m pytest -m gpu                      # CUDA-only tests
 .venv/bin/python -m warpbiocell.run --config configs/tumor_spheroid.yaml            # experiment -> runs/<timestamp>_<name>/
 .venv/bin/python -m warpbiocell.run --config configs/tumor_spheroid.yaml \
-    --set oxygen.boundary_mmHg=150 --set simulation.duration_h=48 --device cpu     # overrides; a sweep is a list of these
+    --set oxygen.boundary_mmHg=150 --set simulation.duration_h=48 --device cpu     # overrides
+.venv/bin/python -m warpbiocell.sweep --config configs/tumor_spheroid.yaml \
+    --sweep configs/sweeps/oxygen_boundary.yaml [--dry-run]                        # grid x seeds -> summary.csv
+.venv/bin/python examples/analyze_sweep.py runs/<sweep dir> --zero-order-oxygen --figure out.png
 .venv/bin/python examples/spike_repulsion.py           # 10k cells + HashGrid + repulsion
 .venv/bin/python examples/growth_contact_inhibition.py # growth by division under contact inhibition
 .venv/bin/python examples/spheroid_oxygen.py           # coupled spheroid without the run-directory machinery
