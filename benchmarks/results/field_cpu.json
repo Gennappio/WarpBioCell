@@ -1,0 +1,74 @@
+{
+  "timestamp": "2026-09-22T10:33:33.867456+00:00",
+  "warpbiocell_version": "0.0.1",
+  "warp_version": "1.17.0",
+  "device": {
+    "alias": "cpu",
+    "name": "arm",
+    "is_cuda": false
+  },
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "python": "3.12.9",
+  "parameters": {
+    "radius_um": 8.0,
+    "dx_um": 20.0,
+    "omega": 1.8,
+    "tolerance": 1e-05,
+    "repeats": 10,
+    "warmup": 3
+  },
+  "records": [
+    {
+      "nodes_per_axis": 41,
+      "nodes": 68921,
+      "cells": 10000,
+      "deposit_ms": 0.22175000049173832,
+      "sor_sweep_ms": 0.42266650052624755,
+      "residual_check_ms": 0.28954150184290484,
+      "sample_ms": 0.04397899829200469,
+      "cold_solve_sweeps": 70,
+      "warm_update_ms": 4.761104002682259,
+      "warm_update_sweeps": 10,
+      "nodes_per_second_per_sweep": 163062366.93513402
+    },
+    {
+      "nodes_per_axis": 41,
+      "nodes": 68921,
+      "cells": 100000,
+      "deposit_ms": 0.6293540027400013,
+      "sor_sweep_ms": 0.41733350008144043,
+      "residual_check_ms": 0.30597949807997793,
+      "sample_ms": 0.4038539991597645,
+      "cold_solve_sweeps": 40,
+      "warm_update_ms": 5.530749996978557,
+      "warm_update_sweeps": 10,
+      "nodes_per_second_per_sweep": 165146100.14904252
+    },
+    {
+      "nodes_per_axis": 81,
+      "nodes": 531441,
+      "cells": 10000,
+      "deposit_ms": 1.4395210018847138,
+      "sor_sweep_ms": 3.242041500925552,
+      "residual_check_ms": 2.387000000453554,
+      "sample_ms": 0.04175000140094198,
+      "cold_solve_sweeps": 390,
+      "warm_update_ms": 34.42241649827338,
+      "warm_update_sweeps": 10,
+      "nodes_per_second_per_sweep": 163921714.09535685
+    },
+    {
+      "nodes_per_axis": 81,
+      "nodes": 531441,
+      "cells": 100000,
+      "deposit_ms": 1.7577920007170178,
+      "sor_sweep_ms": 3.0983750002633315,
+      "residual_check_ms": 2.3748124986013863,
+      "sample_ms": 0.40216650450020097,
+      "cold_solve_sweeps": 210,
+      "warm_update_ms": 34.992229000636144,
+      "warm_update_sweeps": 10,
+      "nodes_per_second_per_sweep": 171522491.6140986
+    }
+  ]
+}
