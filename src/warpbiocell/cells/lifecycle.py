@@ -1,4 +1,4 @@
-"""Cell lifecycle step: death, contact inhibition and division with deterministic slot allocation."""
+"""Cell lifecycle step: death, hypoxia, contact inhibition and division with deterministic slot allocation."""
 
 from __future__ import annotations
 
@@ -17,31 +17,52 @@ class CapacityError(RuntimeError):
 
 @dataclass(frozen=True)
 class LifecycleParams:
-    """Stochastic, rate-based lifecycle.
+    """Stochastic, rate-based lifecycle. Oxygen values are in mmHg (see fields/oxygen.py).
 
     division_rate          lambda [1/h]   illustrative; ln(2)/24 ~ 0.0289 corresponds to a 24 h
                                           doubling time in the absence of inhibition and death
-    death_rate             [1/h]          placeholder until oxygen-dependent death exists
+    death_rate             [1/h]          baseline death rate above death_threshold; illustrative
+    anoxic_death_rate      [1/h]          death rate below death_threshold (the larger of the
+                                          two rates applies there); illustrative
     inhibition_threshold   [-]            a cell with at least this many neighbours within the
                                           mechanics query radius is QUIESCENT; illustrative
+    hypoxia_threshold      [mmHg]         below it the cell is HYPOXIC and divides at a reduced
+                                          rate; 8 mmHg (~1% O2) is a common HIF-activation
+                                          anchor, estimated
+    death_threshold        [mmHg]         below it the anoxic death rate applies and division
+                                          stops; illustrative
     placement_factor       [-]            centre-to-centre distance of the new pair as a
                                           multiple of the parent radius (1.0 = one radius apart,
                                           i.e. an initial overlap of one radius that the
                                           mechanics relaxes)
+
+    With both thresholds at 0 the lifecycle is oxygen-independent (Milestone 3 behaviour).
     """
 
     division_rate: float = 0.0289
     death_rate: float = 0.0
+    anoxic_death_rate: float = 0.0
     inhibition_threshold: int = 8
+    hypoxia_threshold: float = 0.0
+    death_threshold: float = 0.0
     placement_factor: float = 1.0
 
     def __post_init__(self):
-        if self.division_rate < 0.0 or self.death_rate < 0.0:
+        if self.division_rate < 0.0 or self.death_rate < 0.0 or self.anoxic_death_rate < 0.0:
             raise ValueError("rates must be non-negative")
         if self.inhibition_threshold < 1:
             raise ValueError("inhibition_threshold must be at least 1")
+        if self.death_threshold < 0.0 or self.hypoxia_threshold < self.death_threshold:
+            raise ValueError("need 0 <= death_threshold <= hypoxia_threshold")
         if self.placement_factor <= 0.0:
             raise ValueError("placement_factor must be positive")
+
+    @classmethod
+    def oxygen_dependent(cls, **overrides) -> LifecycleParams:
+        """Defaults with the illustrative oxygen thresholds switched on."""
+        values = {"hypoxia_threshold": 8.0, "death_threshold": 2.0, "anoxic_death_rate": 0.5}
+        values.update(overrides)
+        return cls(**values)
 
 
 def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: float) -> int:
@@ -65,11 +86,15 @@ def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: floa
         inputs=[
             dt,
             params.death_rate,
+            params.anoxic_death_rate,
             params.division_rate,
             params.inhibition_threshold,
+            params.hypoxia_threshold,
+            params.death_threshold,
             population.cell_state,
             population.age,
             population.neighbor_count,
+            population.oxygen_local,
             population.rng_state,
         ],
         outputs=[population.divide_flag],
@@ -99,6 +124,7 @@ def lifecycle_step(population: CellPopulation, params: LifecycleParams, dt: floa
             population.cell_state,
             population.cell_type,
             population.age,
+            population.oxygen_local,
             population.rng_state,
             population.velocity,
             population.neighbor_count,

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-22T10:11:38.559281+00:00",
+  "timestamp": "2026-09-22T10:35:27.137564+00:00",
   "warpbiocell_version": "0.0.1",
   "warp_version": "1.17.0",
   "device": {
@@ -20,33 +20,33 @@
   "records": [
     {
       "cells": 1000,
-      "decide_kernel_ms": 0.012853997759521008,
-      "scan_and_host_read_ms": 0.007958504284033552,
-      "place_all_daughters_ms": 0.04035399615531787,
-      "lifecycle_step_ms": 0.03383350122021511,
-      "cell_step_ms": 3.6510415011434816,
+      "decide_kernel_ms": 0.01560400050948374,
+      "scan_and_host_read_ms": 0.008082999556791037,
+      "place_all_daughters_ms": 0.04014599835500121,
+      "lifecycle_step_ms": 0.037458496080944315,
+      "cell_step_ms": 3.9051249987096526,
       "mechanics_substeps_per_cell_step": 10,
-      "cell_steps_per_second": 273.8944489365039
+      "cell_steps_per_second": 256.073749324394
     },
     {
       "cells": 10000,
-      "decide_kernel_ms": 0.0580830019316636,
-      "scan_and_host_read_ms": 0.01052100196829997,
-      "place_all_daughters_ms": 0.31281249539460987,
-      "lifecycle_step_ms": 0.10564599870122038,
-      "cell_step_ms": 36.52110400071251,
+      "decide_kernel_ms": 0.0694585032761097,
+      "scan_and_host_read_ms": 0.009686998964753002,
+      "place_all_daughters_ms": 0.3122079979220871,
+      "lifecycle_step_ms": 0.10856250082724728,
+      "cell_step_ms": 36.18877050030278,
       "mechanics_substeps_per_cell_step": 10,
-      "cell_steps_per_second": 27.381428556499564
+      "cell_steps_per_second": 27.632881310284727
     },
     {
       "cells": 100000,
-      "decide_kernel_ms": 0.5491455012816004,
-      "scan_and_host_read_ms": 0.03335399742354639,
-      "place_all_daughters_ms": 3.069458998652408,
-      "lifecycle_step_ms": 0.7985204974829685,
-      "cell_step_ms": 372.84064599953126,
+      "decide_kernel_ms": 0.6586044946743641,
+      "scan_and_host_read_ms": 0.03120849942206405,
+      "place_all_daughters_ms": 3.1272710002667736,
+      "lifecycle_step_ms": 0.9069585030374583,
+      "cell_step_ms": 362.12683350095176,
       "mechanics_substeps_per_cell_step": 10,
-      "cell_steps_per_second": 2.6821110056795074
+      "cell_steps_per_second": 2.7614634086412484
     }
   ]
 }

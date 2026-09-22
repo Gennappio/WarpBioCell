@@ -64,7 +64,10 @@ def bench_size(n, device, repeats, warmup):
         wp.launch(
             lifecycle_decide,
             dim=n,
-            inputs=[0.25, 0.0, 0.0, 10**6, pop.cell_state, pop.age, pop.neighbor_count, pop.rng_state],
+            inputs=[
+                0.25, 0.0, 0.0, 0.0, 10**6, 0.0, 0.0,
+                pop.cell_state, pop.age, pop.neighbor_count, pop.oxygen_local, pop.rng_state,
+            ],
             outputs=[pop.divide_flag],
             device=device,
         )
@@ -89,7 +92,7 @@ def bench_size(n, device, repeats, warmup):
             dim=n,
             inputs=[
                 n, 1.0, pop.divide_flag, pop.division_offset, pop.position, pop.radius, pop.cell_state,
-                pop.cell_type, pop.age, pop.rng_state, pop.velocity, pop.neighbor_count,
+                pop.cell_type, pop.age, pop.oxygen_local, pop.rng_state, pop.velocity, pop.neighbor_count,
             ],
             device=device,
         )

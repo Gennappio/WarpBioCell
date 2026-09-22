@@ -40,6 +40,7 @@ class CellPopulation:
     cell_state: wp.array  # int32, CellState
     cell_type: wp.array  # int32, CellType
     age: wp.array  # float32, h since birth (or since initialization)
+    oxygen_local: wp.array  # float32, mmHg sampled at the cell centre (0 until a field writes it)
     rng_state: wp.array  # uint32, per-cell RNG stream
     # Per-step outputs and scratch
     velocity: wp.array  # vec3, um/h; overdamped, recomputed from contacts each substep
@@ -92,6 +93,7 @@ class CellPopulation:
             cell_state=wp.array(padded(states, np.int32, fill=int(CellState.DEAD)), dtype=wp.int32, device=device),
             cell_type=wp.full(capacity, int(CellType.TUMOR), dtype=wp.int32, device=device),
             age=wp.zeros(capacity, dtype=wp.float32, device=device),
+            oxygen_local=wp.zeros(capacity, dtype=wp.float32, device=device),
             rng_state=wp.zeros(capacity, dtype=wp.uint32, device=device),
             velocity=wp.zeros(capacity, dtype=wp.vec3, device=device),
             neighbor_count=wp.zeros(capacity, dtype=wp.int32, device=device),
@@ -124,6 +126,9 @@ class CellPopulation:
 
     def ages_numpy(self) -> np.ndarray:
         return self.age.numpy()[: self.count].copy()
+
+    def oxygen_numpy(self) -> np.ndarray:
+        return self.oxygen_local.numpy()[: self.count].copy()
 
     def neighbor_counts_numpy(self) -> np.ndarray:
         return self.neighbor_count.numpy()[: self.count].copy()
