@@ -43,6 +43,14 @@ Replace this file's content when the task is done.
   comparison, `configs/networks/microc_jaya.{bnd,cfg}` (from OpenCellComms),
   `configs/tumor_spheroid_network.yaml` + `docs/results/spheroid_network.md`.
 
+* 2026-09-24 — **warpfvm**, a FiPy-style finite-volume package for MicroC (separate subproject in
+  `warpfvm/`, own pyproject): FiPy's grids, numbering, CellVariable/constrain, Diffusion /
+  ImplicitSource / Transient terms and explicit sources, FiPy's term algebra, solve/sweep, FiPy's
+  solver names; Warp stencil assembly and a device-side preconditioned CG. Assembled systems
+  equal FiPy's to 1e-12 (85 cases), MicroC's `update` flow (steady, transient, gradient
+  boundaries, Picard coupling) agrees with FiPy to round-off; 2nd-order convergence checked;
+  CPU benchmark and validation in `warpfvm/docs/validation.md`; GPU tests written, not run.
+
 ## Decisions taken
 
 * Validation path: reproduce a MicroC oxygen-only configuration first, then a published
@@ -63,6 +71,12 @@ Replace this file's content when the task is done.
   blocked (2026-09-22).
 * Milestone 10 is the OpenCellComms adapter; no LLM call inside WarpBioCell (2026-09-22).
 
+* warpfvm (2026-09-24): lives in this repository as a separate package, not inside
+  `warpbiocell`; every solver name runs preconditioned CG (the systems are symmetric);
+  `LinearLUSolver` reproduces FiPy's early return when the start already meets the tolerance;
+  its own CG loop instead of `warp.optim.linear` (1000x slower dot products on the CPU);
+  CUDA-graph replay off by default until validated on hardware.
+
 ## Open items that need a human decision
 
 * The published spheroid dataset for quantitative validation (cell line, medium O₂, growth
@@ -76,6 +90,13 @@ Replace this file's content when the task is done.
   cells at stationarity with the MicroC network); `configs/tumor_spheroid_network.yaml` uses
   0.1/h for an effective ~0.02/h — an illustrative choice to confirm or replace.
 
+* Switching MicroCpy to warpfvm (two import lines in `multi_substance_simulator.py`,
+  one in `core/domain.py`) is a change in the OpenCellComms repository: not done.
+* FiPy's LU early return can leave a MicroC field unchanged when its residual is below
+  1e-6 ||b|| (seen in 2-D test problems); check MicroC's real 2-D source magnitudes before
+  relying on either library's LU there.
+* Upstream candidate: `warp.optim.linear` CPU slowness (docs/upstream.md), not filed.
+
 ## Next
 
 * Milestone 6 — performance on the CUDA machine (README "On a CUDA machine"): run the gpu
@@ -85,3 +106,7 @@ Replace this file's content when the task is done.
 * Network follow-ups: MCT1 lactate uptake and pH as species the network can read
   (`MCT1_stimulus` already reads lactate); a comparison of the `maboss` mode against the
   MaBoSS binary on the MicroC network (the closed-form checks stand in for now).
+* warpfvm on the CUDA machine: `pytest warpfvm/tests -m gpu -v`, `warpfvm/benchmarks/bench_fvm.py`
+  in float64 and float32, commit `warpfvm/benchmarks/results/fvm_cuda0_*.json`; then decide the
+  `use_cuda_graph` default and whether a multigrid preconditioner is worth it (CG iterations
+  grow as ~3n: 280 at 96^3).

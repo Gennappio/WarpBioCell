@@ -16,7 +16,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" -e "./warpfvm[dev]"
       - name: Warp devices
         run: python -c "import warp as wp; wp.init(); print([d.alias for d in wp.get_devices()])"
       - name: Tests (CPU; gpu-marked tests skip)

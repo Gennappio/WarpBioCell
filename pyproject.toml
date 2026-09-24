@@ -38,7 +38,7 @@ dev = [
 where = ["src"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "warpfvm/tests"]  # warpfvm/: the FiPy-style solver subproject (skipped if not installed)
 markers = [
     "gpu: requires a CUDA device (skipped automatically when none is present)",
 ]

@@ -44,6 +44,16 @@ Only if spatial-omics integration exposes a generic data-layer need.
 
 Never force a contribution where the project does not naturally belong.
 
+## Candidates found so far (not filed)
+
+* **warp.optim.linear on the CPU** (2026-09-24, warp-lang 1.17.0, Apple M-series CPU). The tiled
+  dot product the iterative solvers use (`TiledDot.compute`) costs ~1000x a native
+  `wp.utils.array_inner` on the same data (28.6 ms against 0.028 ms for 32^3 values), so
+  `warp.optim.linear.cg` takes ~160 ms per iteration on a 32^3 Poisson problem on the CPU.
+  Minimal reproduction: `warpfvm/benchmarks/repro_warp_cpu_tiled_dot.py`. warpfvm works around
+  it with its own CG loop on `array_inner`. Before proposing: check current Warp main and open
+  issues, and check whether CUDA is affected (probably not: the tiles target GPUs).
+
 ## Before proposing anything
 
 1. verify the repository CONTRIBUTING instructions;

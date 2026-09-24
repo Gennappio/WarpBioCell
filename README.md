@@ -55,6 +55,23 @@ repository) exposes domain / substance / cell-rule / tissue nodes, a run node, a
 and a summary node, and ships three workflows. Contract and installation:
 [docs/integrations/opencellcomms.md](docs/integrations/opencellcomms.md).
 
+## warpfvm (FiPy-style finite volumes for MicroC)
+
+[warpfvm/](warpfvm/README.md) is a separate, independently installable package in this
+repository: the subset of FiPy that MicroC uses (uniform grids, Dirichlet constraints,
+diffusion with a constant coefficient, implicit and explicit sources, backward-Euler transient
+terms, FiPy's solver names) with FiPy's numbering and discretization, assembled and solved by
+Warp kernels on the CPU or CUDA. MicroC's diffusion code runs by changing its imports; the
+assembled systems equal FiPy's to 1e-12 and the solutions agree to round-off
+([warpfvm/docs/validation.md](warpfvm/docs/validation.md)). WarpBioCell does not use it (its own
+oxygen solver is a matrix-free SOR).
+
+```bash
+uv pip install --python .venv/bin/python -e "warpfvm[dev]"   # adds FiPy for the parity tests
+.venv/bin/python -m pytest warpfvm/tests
+.venv/bin/python warpfvm/examples/microc_drop_in.py          # MicroC's update with FiPy and warpfvm
+```
+
 ## On a CUDA machine
 
 Nothing has been run on CUDA yet; everything takes the device from configuration. Checklist:
@@ -68,6 +85,8 @@ python benchmarks/bench_mechanics.py --device cuda:0 --sizes 1000 10000 100000 1
 python benchmarks/bench_lifecycle.py --device cuda:0 --sizes 1000 10000 100000
 python benchmarks/bench_field.py     --device cuda:0 --nodes 41 81 161 --cells 10000 100000
 python -m warpbiocell.run --config configs/tumor_spheroid.yaml --device cuda:0
+pip install -e "warpfvm[dev]" && pytest warpfvm/tests -m gpu -v     # warpfvm: CUDA vs CPU checks
+python warpfvm/benchmarks/bench_fvm.py --device cuda:0 --sizes 15 32 64 128 192 256 --fipy-max 96
 ```
 
 The benchmarks write `benchmarks/results/*_cuda0.json` next to the CPU files; commit them.

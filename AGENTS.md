@@ -18,6 +18,7 @@ Related documents:
 * [docs/roadmap.md](docs/roadmap.md) — milestones, definition of MVP complete, experiment runner, sweeps;
 * [docs/upstream.md](docs/upstream.md) — upstream contribution strategy and PR discipline;
 * [docs/integrations/opencellcomms.md](docs/integrations/opencellcomms.md) — the OpenCellComms adapter (`MicroC_warp`) and the API contract it relies on;
+* [warpfvm/README.md](warpfvm/README.md) — the FiPy-style finite-volume package for MicroC (separate subproject);
 * [TODO.md](TODO.md) — the current task.
 
 Read `TODO.md` first. Read the other documents only when the task touches them.
@@ -87,6 +88,8 @@ uv pip install --python .venv/bin/python -e ".[dev]"   # or: pip install -e ".[d
 .venv/bin/python benchmarks/bench_mechanics.py         # per-kernel mechanics timings -> benchmarks/results/
 .venv/bin/python benchmarks/bench_lifecycle.py         # lifecycle and full cell-step timings
 .venv/bin/python benchmarks/bench_field.py             # deposit / SOR sweep / sample / warm update timings
+uv pip install --python .venv/bin/python -e "warpfvm[dev]"   # warpfvm subproject (+ FiPy for parity tests)
+.venv/bin/python warpfvm/benchmarks/bench_fvm.py --device cpu  # warpfvm vs FiPy on MicroC's oxygen problem
 ```
 
 Run directory contents and metric definitions: `src/warpbiocell/io/run_output.py`. Programmatic use: `Experiment(load_config(path)).run(output_dir)` (`simulation/experiment.py`). Results of the baseline: `docs/results/spheroid_baseline.md`.
@@ -128,6 +131,9 @@ src/warpbiocell/
     sweep.py        python -m warpbiocell.sweep
     export_usd.py   python -m warpbiocell.export_usd
 examples/  tests/  benchmarks/  docs/  configs/
+warpfvm/        separate package: FiPy's API subset used by MicroC (uniform grids, Dirichlet, scalar
+                diffusion, implicit/explicit sources, transient), Warp stencil assembly + device CG;
+                own pyproject, tests (warpfvm/tests, FiPy parity), benchmarks, docs/validation.md
 ```
 
 This may change if a better design emerges. Prefer clarity over abstraction.

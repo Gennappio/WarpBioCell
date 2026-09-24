@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "warpfvm"
+version = "0.1.0"
+description = "FiPy-style finite volumes on uniform grids, parallel on CPU and CUDA with NVIDIA Warp (the FiPy subset MicroC uses)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "warp-lang>=1.17",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+fipy = [
+    "fipy>=4.0",       # the reference implementation: parity tests and benchmark only
+    "scipy>=1.11",
+]
+dev = [
+    "pytest>=8",
+    "fipy>=4.0",
+    "scipy>=1.11",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "gpu: requires a CUDA device (skipped automatically when none is present)",
+]
